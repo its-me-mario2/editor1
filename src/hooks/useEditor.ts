@@ -2,14 +2,8 @@ import { useState, useCallback, useRef } from 'react';
 import { Track, Clip, ClipType } from '../types';
 import { createInitialTracks, clamp } from '../data';
 
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 9);
-}
-
-interface HistoryEntry {
-  tracks: Track[];
-  selectedClipId: string | null;
-}
+let _id = 0;
+function id(): string { return `c${++_id}-${Math.random().toString(36).slice(2, 6)}`; }
 
 export function useEditor() {
   const [tracks, setTracks] = useState<Track[]>(() => createInitialTracks());
@@ -17,192 +11,146 @@ export function useEditor() {
   const [zoom, setZoom] = useState(150);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const playbackRef = useRef<number | null>(null);
-  const lastFrameRef = useRef<number>(0);
+  const playRef = useRef<number>(0);
+  const tracksRef = useRef(tracks);
+  tracksRef.current = tracks;
+  const selRef = useRef(selectedClipId);
+  selRef.current = selectedClipId;
 
-  const historyRef = useRef<HistoryEntry[]>([]);
-  const historyIdxRef = useRef(-1);
-  const skipHistoryRef = useRef(false);
+  const history = useRef<{ t: Track[]; s: string | null }[]>([]);
+  const hIdx = useRef(-1);
+  const skipHis = useRef(false);
 
-  const pushHistory = useCallback((newTracks: Track[], newSelected: string | null) => {
-    if (skipHistoryRef.current) { skipHistoryRef.current = false; return; }
-    const entry: HistoryEntry = { tracks: JSON.parse(JSON.stringify(newTracks)), selectedClipId: newSelected };
-    historyRef.current = historyRef.current.slice(0, historyIdxRef.current + 1);
-    historyRef.current.push(entry);
-    if (historyRef.current.length > 50) historyRef.current.shift();
-    historyIdxRef.current = historyRef.current.length - 1;
-  }, []);
+  function saveHistory(next: Track[]) {
+    if (skipHis.current) { skipHis.current = false; return; }
+    const entry = { t: JSON.parse(JSON.stringify(next)), s: selRef.current };
+    const arr = history.current;
+    arr.length = hIdx.current + 1;
+    arr.push(entry);
+    if (arr.length > 50) arr.shift();
+    hIdx.current = arr.length - 1;
+  }
 
-  const wrapSetTracks = useCallback((updater: Track[] | ((prev: Track[]) => Track[]), pushHistoryFlag = true) => {
+  const updateTracks = useCallback((fn: (prev: Track[]) => Track[]) => {
     setTracks(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      if (pushHistoryFlag) {
-        setTimeout(() => pushHistory(next, selectedClipId), 0);
-      }
+      const next = fn(prev);
+      saveHistory(next);
       return next;
     });
-  }, [pushHistory, selectedClipId]);
+  }, []);
 
   const undo = useCallback(() => {
-    if (historyIdxRef.current < 0) return;
-    const entry = historyRef.current[historyIdxRef.current];
-    historyIdxRef.current--;
-    skipHistoryRef.current = true;
-    setTracks(JSON.parse(JSON.stringify(entry.tracks)));
-    setSelectedClipId(entry.selectedClipId);
+    if (hIdx.current < 0) return;
+    const entry = history.current[hIdx.current];
+    hIdx.current--;
+    skipHis.current = true;
+    setTracks(JSON.parse(JSON.stringify(entry.t)));
+    setSelectedClipId(entry.s);
   }, []);
 
   const redo = useCallback(() => {
-    if (historyIdxRef.current + 1 >= historyRef.current.length) return;
-    historyIdxRef.current++;
-    const entry = historyRef.current[historyIdxRef.current];
-    skipHistoryRef.current = true;
-    setTracks(JSON.parse(JSON.stringify(entry.tracks)));
-    setSelectedClipId(entry.selectedClipId);
+    if (hIdx.current + 1 >= history.current.length) return;
+    hIdx.current++;
+    const entry = history.current[hIdx.current];
+    skipHis.current = true;
+    setTracks(JSON.parse(JSON.stringify(entry.t)));
+    setSelectedClipId(entry.s);
   }, []);
 
-  const canUndo = historyIdxRef.current >= 0;
-  const canRedo = historyIdxRef.current + 1 < historyRef.current.length;
+  const canUndo = hIdx.current >= 0;
+  const canRedo = hIdx.current + 1 < history.current.length;
 
   const duration = Math.max(...tracks.flatMap(t => t.clips.map(c => c.startTime + c.duration)), 10);
 
   const getSelectedClip = useCallback((): Clip | null => {
-    if (!selectedClipId) return null;
-    for (const t of tracks) { const c = t.clips.find(c => c.id === selectedClipId); if (c) return c; }
+    const id = selRef.current;
+    if (!id) return null;
+    for (const t of tracksRef.current) {
+      const c = t.clips.find(x => x.id === id);
+      if (c) return c;
+    }
     return null;
-  }, [tracks, selectedClipId]);
-
-  const sortedTracks = [...tracks].sort((a, b) => a.order - b.order);
-
-  const addTrack = useCallback((kind: Track['kind'], label?: string) => {
-    wrapSetTracks(prev => {
-      const maxOrder = Math.max(...prev.map(t => t.order), -1);
-      return [...prev, { id: `track-${generateId()}`, kind, label: label || `${kind === 'video' ? 'Video' : kind === 'audio' ? 'Audio' : kind === 'sticker' ? 'Sticker' : 'Text'} ${prev.filter(t => t.kind === kind).length + 1}`, order: maxOrder + 1, clips: [] }];
-    });
-  }, [wrapSetTracks]);
-
-  const removeTrack = useCallback((trackId: string) => wrapSetTracks(prev => prev.filter(t => t.id !== trackId)), [wrapSetTracks]);
-  const toggleTrackHidden = useCallback((trackId: string) => wrapSetTracks(prev => prev.map(t => t.id === trackId ? { ...t, hidden: !t.hidden } : t)), [wrapSetTracks]);
-  const toggleTrackLocked = useCallback((trackId: string) => wrapSetTracks(prev => prev.map(t => t.id === trackId ? { ...t, locked: !t.locked } : t)), [wrapSetTracks]);
-
-  const reorderTrack = useCallback((trackId: string, newOrder: number) => {
-    wrapSetTracks(prev => {
-      const track = prev.find(t => t.id === trackId);
-      if (!track) return prev;
-      const others = prev.filter(t => t.id !== trackId).sort((a, b) => a.order - b.order);
-      const clampedOrder = clamp(newOrder, 0, prev.length - 1);
-      others.splice(clampedOrder, 0, track);
-      return others.map((t, i) => ({ ...t, order: i }));
-    });
-  }, [wrapSetTracks]);
-
-  const addClip = useCallback((trackId: string, partial: Partial<Clip> & { type: ClipType; label: string; duration: number }) => {
-    const id = `clip-${generateId()}`;
-    wrapSetTracks(prev => prev.map(t => {
-      if (t.id !== trackId) return t;
-      return { ...t, clips: [...t.clips, { id, type: partial.type, trackId, label: partial.label, startTime: partial.startTime ?? 0, duration: partial.duration, color: partial.color || (partial.type === 'video' ? '#3b82f6' : partial.type === 'audio' ? '#8b5cf6' : '#f59e0b'), speed: partial.speed ?? 1, volume: partial.volume ?? 1, opacity: partial.opacity ?? 1, scale: partial.scale ?? 1, rotation: partial.rotation ?? 0, text: partial.text, fontSize: partial.fontSize, fontColor: partial.fontColor, bgColor: partial.bgColor, fadeIn: partial.fadeIn, fadeOut: partial.fadeOut, posX: partial.posX, posY: partial.posY, zIndex: partial.zIndex, transition: partial.transition, keyframes: partial.keyframes, colorAdjust: partial.colorAdjust }] };
-    }));
-    return id;
-  }, [wrapSetTracks]);
-
-  const updateClip = useCallback((clipId: string, changes: Partial<Clip>) => {
-    wrapSetTracks(prev => prev.map(t => ({ ...t, clips: t.clips.map(c => c.id === clipId ? { ...c, ...changes } : c) })));
-  }, [wrapSetTracks]);
-
-  const removeClip = useCallback((clipId: string) => {
-    wrapSetTracks(prev => prev.map(t => ({ ...t, clips: t.clips.filter(c => c.id !== clipId) })));
-    setSelectedClipId(prev => prev === clipId ? null : prev);
-  }, [wrapSetTracks]);
-
-  const moveClip = useCallback((clipId: string, newStart: number) => {
-    wrapSetTracks(prev => prev.map(t => {
-      if (!t.clips.some(c => c.id === clipId)) return t;
-      return { ...t, clips: t.clips.map(c => c.id === clipId ? { ...c, startTime: Math.max(0, newStart) } : c) };
-    }), false);
-  }, [wrapSetTracks]);
-
-  const moveClipToTrack = useCallback((clipId: string, targetTrackId: string, newStart: number) => {
-    wrapSetTracks(prev => {
-      let movedClip: Clip | null = null;
-      const without = prev.map(t => ({ ...t, clips: t.clips.filter(c => { if (c.id === clipId) { movedClip = c; return false; } return true; }) }));
-      if (!movedClip) return prev;
-      return without.map(t => t.id === targetTrackId ? { ...t, clips: [...t.clips, { ...movedClip!, startTime: Math.max(0, newStart), trackId: targetTrackId }].sort((a, b) => a.startTime - b.startTime) } : t);
-    });
-  }, [wrapSetTracks]);
-
-  const trimClip = useCallback((clipId: string, edge: 'left' | 'right', delta: number, initialStart: number, initialDuration: number) => {
-    wrapSetTracks(prev => prev.map(t => ({ ...t, clips: t.clips.map(c => { if (c.id !== clipId) return c; if (edge === 'left') { const ns = Math.max(0, initialStart + delta); return { ...c, startTime: ns, duration: Math.max(0.5, initialDuration - delta) }; } return { ...c, duration: Math.max(0.5, initialDuration + delta) }; }) })));
-  }, [wrapSetTracks]);
-
-  const splitClip = useCallback((clipId: string, splitTime: number) => {
-    wrapSetTracks(prev => prev.map(t => {
-      const idx = t.clips.findIndex(c => c.id === clipId);
-      if (idx === -1) return t;
-      const clip = t.clips[idx];
-      const localSplit = splitTime - clip.startTime;
-      if (localSplit <= 0 || localSplit >= clip.duration) return t;
-      const rightClip: Clip = { ...clip, id: `clip-${generateId()}`, startTime: splitTime, duration: clip.duration - localSplit };
-      const leftClip: Clip = { ...clip, duration: localSplit };
-      const nc = [...t.clips]; nc.splice(idx, 1, leftClip, rightClip);
-      return { ...t, clips: nc };
-    }));
-  }, [wrapSetTracks]);
-
-  const addKeyframe = useCallback((clipId: string, property: string, time: number, value: number) => {
-    wrapSetTracks(prev => prev.map(t => ({ ...t, clips: t.clips.map(c => { if (c.id !== clipId) return c; const kfs = { ...(c.keyframes || {}) }; const arr = [...((kfs as any)[property] || [])]; const ei = arr.findIndex((k: any) => Math.abs(k.time - time) < 0.05); if (ei >= 0) arr[ei] = { time, value }; else arr.push({ time, value }); arr.sort((a: any, b: any) => a.time - b.time); (kfs as any)[property] = arr; return { ...c, keyframes: kfs as any }; }) })));
-  }, [wrapSetTracks]);
-
-  const removeKeyframe = useCallback((clipId: string, property: string, time: number) => {
-    wrapSetTracks(prev => prev.map(t => ({ ...t, clips: t.clips.map(c => { if (c.id !== clipId) return c; const kfs = { ...(c.keyframes || {}) }; (kfs as any)[property] = ((kfs as any)[property] || []).filter((k: any) => Math.abs(k.time - time) >= 0.05); return { ...c, keyframes: kfs as any }; }) })));
-  }, [wrapSetTracks]);
-
-  const setTransition = useCallback((clipId: string, type: string, duration: number) => {
-    wrapSetTracks(prev => prev.map(t => ({ ...t, clips: t.clips.map(c => c.id === clipId ? { ...c, transition: { type: type as any, duration } } : c) })));
-  }, [wrapSetTracks]);
-
-  const startPlayback = useCallback(() => {
-    setIsPlaying(true);
-    lastFrameRef.current = performance.now();
-    const step = (now: number) => {
-      const dt = (now - lastFrameRef.current) / 1000;
-      lastFrameRef.current = now;
-      setCurrentTime(p => { const n = p + dt; if (n >= duration) { setIsPlaying(false); return 0; } return n; });
-      playbackRef.current = requestAnimationFrame(step);
-    };
-    playbackRef.current = requestAnimationFrame(step);
-  }, [duration]);
-
-  const stopPlayback = useCallback(() => {
-    setIsPlaying(false);
-    if (playbackRef.current !== null) { cancelAnimationFrame(playbackRef.current); playbackRef.current = null; }
   }, []);
 
-  const togglePlayback = useCallback(() => { if (isPlaying) stopPlayback(); else startPlayback(); }, [isPlaying, startPlayback, stopPlayback]);
-  const seek = useCallback((t: number) => setCurrentTime(clamp(t, 0, duration)), [duration]);
+  const addTrack = useCallback((kind: Track['kind'], label?: string) => {
+    updateTracks(prev => {
+      const maxO = Math.max(...prev.map(t => t.order), -1);
+      const n = prev.filter(t => t.kind === kind).length + 1;
+      return [...prev, { id: `tr-${id()}`, kind, label: label || `${kind.charAt(0).toUpperCase() + kind.slice(1)} ${n}`, order: maxO + 1, clips: [] }];
+    });
+  }, [updateTracks]);
+
+  const removeTrack = useCallback((tid: string) => updateTracks(prev => prev.filter(t => t.id !== tid)), [updateTracks]);
+  const toggleHidden = useCallback((tid: string) => updateTracks(prev => prev.map(t => t.id === tid ? { ...t, hidden: !t.hidden } : t)), [updateTracks]);
+  const toggleLocked = useCallback((tid: string) => updateTracks(prev => prev.map(t => t.id === tid ? { ...t, locked: !t.locked } : t)), [updateTracks]);
+  const reorderTrack = useCallback((tid: string, order: number) => updateTracks(prev => { const t = prev.find(x => x.id === tid); if (!t) return prev; const o = prev.filter(x => x.id !== tid).sort((a, b) => a.order - b.order); o.splice(clamp(order, 0, prev.length - 1), 0, t); return o.map((x, i) => ({ ...x, order: i })); }), [updateTracks]);
+
+  const addClip = useCallback((trackId: string, p: Partial<Clip> & { type: ClipType; label: string; duration: number }) => {
+    const cid = id();
+    updateTracks(prev => prev.map(t => t.id !== trackId ? t : { ...t, clips: [...t.clips, { id: cid, type: p.type, trackId, label: p.label, startTime: p.startTime ?? 0, duration: p.duration, color: p.color || '#3b82f6', speed: p.speed ?? 1, volume: p.volume ?? 1, opacity: p.opacity ?? 1, scale: p.scale ?? 1, rotation: p.rotation ?? 0, text: p.text, fontSize: p.fontSize, fontColor: p.fontColor, bgColor: p.bgColor, fadeIn: p.fadeIn, fadeOut: p.fadeOut, posX: p.posX, posY: p.posY, zIndex: p.zIndex, transition: p.transition, keyframes: undefined, colorAdjust: p.colorAdjust }] }));
+    return cid;
+  }, [updateTracks]);
+
+  const updateClip = useCallback((cid: string, ch: Partial<Clip>) => updateTracks(prev => prev.map(t => ({ ...t, clips: t.clips.map(c => c.id === cid ? { ...c, ...ch } : c) }))), [updateTracks]);
+
+  const removeClip = useCallback((cid: string) => { updateTracks(prev => prev.map(t => ({ ...t, clips: t.clips.filter(c => c.id !== cid) }))); setSelectedClipId(p => p === cid ? null : p); }, [updateTracks]);
+
+  const moveClip = useCallback((cid: string, st: number) => updateTracks(prev => prev.map(t => ({ ...t, clips: t.clips.map(c => c.id === cid ? { ...c, startTime: Math.max(0, st) } : c) }))), [updateTracks]);
+
+  const trimClip = useCallback((cid: string, edge: 'left' | 'right', delta: number, iStart: number, iDur: number) => updateTracks(prev => prev.map(t => ({ ...t, clips: t.clips.map(c => { if (c.id !== cid) return c; if (edge === 'left') { const ns = Math.max(0, iStart + delta); return { ...c, startTime: ns, duration: Math.max(0.5, iDur - delta) }; } return { ...c, duration: Math.max(0.5, iDur + delta) }; }) }))), [updateTracks]);
+
+  const splitClip = useCallback((cid: string, at: number) => updateTracks(prev => prev.map(t => { const idx = t.clips.findIndex(c => c.id === cid); if (idx === -1) return t; const c = t.clips[idx]; const local = at - c.startTime; if (local <= 0 || local >= c.duration) return t; const nc = [...t.clips]; nc.splice(idx, 1, { ...c, duration: local }, { ...c, id: id(), startTime: at, duration: c.duration - local }); return { ...t, clips: nc }; })), [updateTracks]);
+
+  const addKeyframe = useCallback((cid: string, prop: string, time: number, value: number) => {
+    updateTracks(prev => prev.map(t => ({ ...t, clips: t.clips.map(c => { if (c.id !== cid) return c; const kfs = { ...(c.keyframes || {}) }; const arr = [...((kfs as any)[prop] || [])]; const ei = arr.findIndex((k: any) => Math.abs(k.time - time) < 0.05); if (ei >= 0) arr[ei] = { time, value }; else arr.push({ time, value }); arr.sort((a: any, b: any) => a.time - b.time); (kfs as any)[prop] = arr; return { ...c, keyframes: kfs }; }) })));
+  }, [updateTracks]);
+
+  const removeKeyframe = useCallback((cid: string, prop: string, time: number) => {
+    updateTracks(prev => prev.map(t => ({ ...t, clips: t.clips.map(c => { if (c.id !== cid) return c; const kfs = { ...(c.keyframes || {}) }; (kfs as any)[prop] = ((kfs as any)[prop] || []).filter((k: any) => Math.abs(k.time - time) >= 0.05); return { ...c, keyframes: kfs }; }) })));
+  }, [updateTracks]);
+
+  const setTransition = useCallback((cid: string, type: string, dur: number) => {
+    updateTracks(prev => prev.map(t => ({ ...t, clips: t.clips.map(c => c.id === cid ? { ...c, transition: { type: type as any, duration: dur } } : c) })));
+  }, [updateTracks]);
+
+  const startPlay = useCallback(() => {
+    setIsPlaying(true);
+    playRef.current = performance.now();
+    const step = (now: number) => {
+      const dt = (now - playRef.current) / 1000;
+      playRef.current = now;
+      setCurrentTime(p => { const n = p + dt; const dur = Math.max(...tracksRef.current.flatMap(t => t.clips.map(c => c.startTime + c.duration)), 10); if (n >= dur) { setIsPlaying(false); return 0; } return n; });
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, []);
+
+  const stopPlay = useCallback(() => { setIsPlaying(false); }, []);
+  const togglePlayback = useCallback(() => { if (isPlaying) stopPlay(); else startPlay(); }, [isPlaying, startPlay, stopPlay]);
+  const seek = useCallback((t: number) => setCurrentTime(clamp(t, 0, Math.max(...tracks.flatMap(t => t.clips.map(c => c.startTime + c.duration)), 10))), [tracks]);
   const selectClip = useCallback((id: string | null) => setSelectedClipId(id), []);
 
   return {
-    tracks, setTracks: wrapSetTracks, sortedTracks,
+    tracks, setTracks: updateTracks, sortedTracks: [...tracks].sort((a, b) => a.order - b.order),
     currentTime, setCurrentTime, zoom, setZoom,
     selectedClipId, setSelectedClipId, isPlaying, setIsPlaying, duration,
     getSelectedClip,
-    addTrack, removeTrack, toggleTrackHidden, toggleTrackLocked, reorderTrack,
-    addClip, updateClip, removeClip, moveClip, moveClipToTrack,
-    trimClip, splitClip, addKeyframe, removeKeyframe, setTransition,
+    addTrack, removeTrack, toggleHidden, toggleLocked, reorderTrack,
+    addClip, updateClip, removeClip, moveClip, trimClip, splitClip,
+    addKeyframe, removeKeyframe, setTransition,
     togglePlayback, seek, selectClip,
     undo, redo, canUndo, canRedo,
   };
 }
 
-function snapTime(proposed: number, tracks: Track[], movingId: string, threshold = 0.15): number {
-  let snapped = proposed;
-  for (const track of tracks) {
-    for (const c of track.clips) {
-      if (c.id === movingId) continue;
-      if (Math.abs(proposed - c.startTime) < threshold) snapped = c.startTime;
-      if (Math.abs(proposed - (c.startTime + c.duration)) < threshold) snapped = c.startTime + c.duration;
+export function snapTime(proposed: number, allTracks: Track[], skipId: string, threshold = 0.15): number {
+  let s = proposed;
+  for (const tr of allTracks) {
+    for (const c of tr.clips) {
+      if (c.id === skipId) continue;
+      if (Math.abs(proposed - c.startTime) < threshold) s = c.startTime;
+      if (Math.abs(proposed - (c.startTime + c.duration)) < threshold) s = c.startTime + c.duration;
     }
   }
-  return snapped;
+  return s;
 }
-export { snapTime };
