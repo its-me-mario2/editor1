@@ -7,11 +7,12 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && npx gh-pages -d dist -m 'deploy: update' -t"
+    "deploy": "npm run build && node node_modules/gh-pages/bin/gh-pages.js -d dist -m deploy -t --nojekyll"
   },
   "dependencies": {
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-draggable": "^4.7.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

@@ -216,9 +216,6 @@ function renderVideoClip(ctx: CanvasRenderingContext2D, clip: Clip, elapsed: num
   ctx.fillStyle = grad;
   ctx.fillRect(vx, vy, vw, vh);
 
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fillRect(vx, vy, vw, vh);
-
   const ca = clip.colorAdjust;
   if (ca && (ca.brightness !== 0 || ca.contrast !== 0 || ca.saturation !== 0)) {
     ctx.fillStyle = `rgba(255,255,255,${ca.brightness / 200})`;
@@ -274,16 +271,17 @@ function renderTextClip(ctx: CanvasRenderingContext2D, clip: Clip, elapsed: numb
   const tw = metrics.width + 28;
   const th = fontSize + 28;
 
-  ctx.shadowColor = 'rgba(0,0,0,0.5)';
-  ctx.shadowBlur = 8;
-  ctx.shadowOffsetY = 2;
-
-  ctx.fillStyle = bgColor;
-  roundRect(ctx, -tw / 2, -th / 2, tw, th, 10);
-  ctx.fill();
-
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
+  const isTransparent = bgColor === 'transparent' || bgColor === 'rgba(0,0,0,0)' || bgColor === 'rgba(0,0,0,0)';
+  if (!isTransparent) {
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 2;
+    ctx.fillStyle = bgColor;
+    roundRect(ctx, -tw / 2, -th / 2, tw, th, 10);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+  }
 
   ctx.fillStyle = fontColor;
   ctx.fillText(text, 0, 0);

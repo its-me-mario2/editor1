@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar, PreviewPlayer, Timeline, PropertiesPanel, ExportModal } from './components';
 import { Track, AspectRatio, SidebarTab } from './types';
 import { useEditor } from './hooks/useEditor';
@@ -14,6 +14,29 @@ export default function App() {
   const [exportOpen, setExportOpen] = useState(false);
 
   const selectedClip = editor.getSelectedClip();
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.code === 'Space') { e.preventDefault(); editor.togglePlayback(); }
+      if (e.code === 'KeyS' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        if (editor.selectedClipId) editor.splitClip(editor.selectedClipId, editor.currentTime);
+      }
+      if (e.code === 'KeyZ' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        if (e.shiftKey) editor.redo(); else editor.undo();
+      }
+      if (e.code === 'KeyY' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); editor.redo(); }
+      if (e.code === 'ArrowLeft') { e.preventDefault(); editor.seek(editor.currentTime - 0.25); }
+      if (e.code === 'ArrowRight') { e.preventDefault(); editor.seek(editor.currentTime + 0.25); }
+      if ((e.code === 'Delete' || e.code === 'Backspace') && editor.selectedClipId) {
+        e.preventDefault(); editor.removeClip(editor.selectedClipId);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [editor]);
 
   const handleAddTextClip = (text: string) => {
     let textTrack = editor.tracks.find((t: Track) => t.kind === 'text');
@@ -60,20 +83,34 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-900 text-white overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center px-4 py-2 bg-zinc-800/90 border-b border-zinc-700/50 flex-shrink-0">
+    <div className="h-screen flex flex-col bg-zinc-900 text-white overflow-hidden select-none">
+      <header className="flex items-center px-4 py-1.5 bg-zinc-800/90 border-b border-zinc-700/50 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-xl">🎬</span>
+          <span className="text-lg">🎬</span>
           <span className="font-bold text-sm">ClipForge</span>
+          <span className="text-[10px] text-white/20 ml-2">v2</span>
+        </div>
+        <div className="flex items-center gap-1 ml-4">
+          <button onClick={editor.undo} disabled={!editor.canUndo}
+            className="px-1.5 py-1 rounded text-[11px] bg-white/5 hover:bg-white/10 disabled:opacity-20 transition-colors" title="Undo Ctrl+Z">↩</button>
+          <button onClick={editor.redo} disabled={!editor.canRedo}
+            className="px-1.5 py-1 rounded text-[11px] bg-white/5 hover:bg-white/10 disabled:opacity-20 transition-colors" title="Redo Ctrl+Shift+Z">↪</button>
         </div>
         <div className="flex-1" />
-        <button onClick={() => setExportOpen(true)} className="px-4 py-1.5 rounded bg-blue-500 hover:bg-blue-400 text-white text-xs font-medium transition-colors">
-          Export
-        </button>
+        <div className="flex items-center gap-2 text-[10px] text-white/20">
+          <kbd className="px-1 py-0.5 rounded bg-white/5 text-white/30">Space</kbd>
+          <span>Play</span>
+          <kbd className="px-1 py-0.5 rounded bg-white/5 text-white/30">S</kbd>
+          <span>Split</span>
+        </div>
+        <div className="ml-4">
+          <button onClick={() => setExportOpen(true)}
+            className="px-3 py-1 rounded bg-blue-500 hover:bg-blue-400 text-white text-xs font-medium transition-colors shadow-lg shadow-blue-500/20">
+            Export
+          </button>
+        </div>
       </header>
 
-      {/* Main workspace */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex flex-1 overflow-hidden">
           <Sidebar

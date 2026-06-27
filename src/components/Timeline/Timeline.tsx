@@ -166,6 +166,7 @@ export default function Timeline({
               <TimelineTrack
                 key={track.id}
                 track={track}
+                allTracks={tracks}
                 isSelected={!!selectedClipId && track.clips.some(c => c.id === selectedClipId)}
                 zoom={zoom}
                 onSelectClip={onSelectClip}
