@@ -1,0 +1,1195 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClipForge - Video Editor</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box}
+    html,body,#root{margin:0;padding:0;height:100%;width:100%;overflow:hidden}
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:#0f172a}
+    ::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:#475569}
+    input[type='range']{-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+    input[type='range']::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:#334155}
+    input[type='range']::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:12px;height:12px;border-radius:50%;background:#3b82f6;margin-top:-4px;box-shadow:0 0 4px rgba(59,130,246,.4)}
+    input[type='range']::-moz-range-track{height:4px;border-radius:2px;background:#334155;border:none}
+    input[type='range']::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#3b82f6;border:none}
+    @keyframes slide-in-from-bottom{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .animate-in{animation:slide-in-from-bottom .2s ease-out}
+    .bg-surface-50{background-color:#f8fafc}.bg-surface-100{background-color:#f1f5f9}.bg-surface-200{background-color:#e2e8f0}.bg-surface-300{background-color:#cbd5e1}.bg-surface-400{background-color:#94a3b8}.bg-surface-500{background-color:#64748b}.bg-surface-600{background-color:#475569}.bg-surface-700{background-color:#334155}.bg-surface-800{background-color:#1e293b}.bg-surface-900{background-color:#0f172a}.bg-surface-950{background-color:#020617}
+    .text-surface-50{color:#f8fafc}.text-surface-100{color:#f1f5f9}.text-surface-200{color:#e2e8f0}.text-surface-300{color:#cbd5e1}.text-surface-400{color:#94a3b8}.text-surface-500{color:#64748b}.text-surface-600{color:#475569}
+    .border-surface-600{border-color:#475569}.border-surface-700{border-color:#334155}.border-surface-800{border-color:#1e293b}
+    .ring-offset-surface-900{--tw-ring-offset-color:#0f172a}
+    .placeholder-surface-500::placeholder{color:#64748b}
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontSize: {
+            '2xs': ['0.625rem', { lineHeight: '0.875rem' }],
+          },
+        },
+      },
+    };
+  </script>
+</head>
+<body class="bg-surface-950 text-white overflow-hidden">
+<div id="root"></div>
+<script type="text/babel" data-type="module">
+const { useState, useCallback, useRef, useEffect, useMemo } = React;
+
+// ─── Data ──────────────────────────────────────────────────────────
+const DEFAULT_TRANSITIONS = [
+  { id: 'crossfade', name: 'Cross-fade', icon: '\u27F7' },
+  { id: 'blur', name: 'Blur', icon: '\u25CE' },
+  { id: 'slide', name: 'Slide', icon: '\u21C4' },
+  { id: 'dissolve', name: 'Dissolve', icon: '\u25D1' },
+  { id: 'wipe', name: 'Wipe', icon: '\u21E8' },
+  { id: 'zoom', name: 'Zoom', icon: '\u2295' },
+  { id: 'fade', name: 'Fade', icon: '\u25D0' },
+  { id: 'pixelate', name: 'Pixelate', icon: '\u25A3' },
+];
+
+const FILTER_PRESETS = [
+  { id: 'normal', name: 'Normal', cls: '' },
+  { id: 'grayscale', name: 'Grayscale', cls: 'grayscale' },
+  { id: 'sepia', name: 'Sepia', cls: 'sepia' },
+  { id: 'invert', name: 'Invert', cls: 'invert' },
+  { id: 'vintage', name: 'Vintage', cls: 'sepia brightness-90 contrast-110' },
+  { id: 'vivid', name: 'Vivid', cls: 'saturate-150 contrast-110' },
+  { id: 'noir', name: 'Noir', cls: 'grayscale contrast-130 brightness-90' },
+  { id: 'pastel', name: 'Pastel', cls: 'saturate-50 brightness-110' },
+];
+
+const AUDIO_EFFECTS = [
+  { id: 'none', name: 'None', icon: '\u2298' },
+  { id: 'echo', name: 'Echo', icon: '\u21BB' },
+  { id: 'reverb', name: 'Reverb', icon: '\uFF5E' },
+  { id: 'bassboost', name: 'Bass Boost', icon: '\u25E2' },
+  { id: 'treble', name: 'Treble', icon: '\u25E4' },
+  { id: 'robot', name: 'Robot', icon: '\u2699' },
+];
+
+const STICKERS = [
+  { id: 's1', name: 'Fire', emoji: '\uD83D\uDD25' },
+  { id: 's2', name: 'Heart', emoji: '\u2764\uFE0F' },
+  { id: 's3', name: 'Star', emoji: '\u2B50' },
+  { id: 's4', name: 'Like', emoji: '\uD83D\uDC4D' },
+  { id: 's5', name: 'Clap', emoji: '\uD83D\uDC4F' },
+  { id: 's6', name: 'Rocket', emoji: '\uD83D\uDE80' },
+  { id: 's7', name: 'Crown', emoji: '\uD83D\uDC51' },
+  { id: 's8', name: 'Check', emoji: '\u2705' },
+];
+
+const ASPECT_RATIOS = [
+  { label: 'YouTube', value: '16:9', w: 16, h: 9, icon: '\uD83D\uDDA5' },
+  { label: 'TikTok', value: '9:16', w: 9, h: 16, icon: '\uD83D\uDCF1' },
+  { label: 'Classic', value: '4:3', w: 4, h: 3, icon: '\uD83D\uDDBC' },
+  { label: 'Square', value: '1:1', w: 1, h: 1, icon: '\u2B1C' },
+];
+
+const RESOLUTIONS = [
+  { label: '720p', w: 1280, h: 720 },
+  { label: '1080p', w: 1920, h: 1080 },
+];
+
+const FPS_OPTIONS = [24, 30, 60];
+
+function formatTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  const ms = Math.floor((s % 1) * 100);
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${String(ms).padStart(2, '0')}`;
+}
+
+function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+
+function createInitialTracks() {
+  return [
+    {
+      id: 'track-video-1', kind: 'video', label: 'Video Track',
+      clips: [
+        { id: 'clip-1', type: 'video', trackId: 'track-video-1', label: 'Beach Sunset', startTime: 0, duration: 8, color: '#f59e0b', speed: 1, volume: 1, opacity: 1 },
+        { id: 'clip-2', type: 'video', trackId: 'track-video-1', label: 'City Timelapse', startTime: 8, duration: 6, color: '#3b82f6', speed: 1, volume: 1, opacity: 1 },
+        { id: 'clip-3', type: 'video', trackId: 'track-video-1', label: 'Mountain View', startTime: 14, duration: 7, color: '#10b981', speed: 1, volume: 1, opacity: 1 },
+      ],
+    },
+    {
+      id: 'track-audio-1', kind: 'audio', label: 'Audio Track',
+      clips: [
+        { id: 'clip-a1', type: 'audio', trackId: 'track-audio-1', label: 'Background Music', startTime: 0, duration: 21, color: '#8b5cf6', volume: 0.7 },
+      ],
+    },
+    {
+      id: 'track-text-1', kind: 'text', label: 'Text Overlays',
+      clips: [
+        { id: 'clip-t1', type: 'text', trackId: 'track-text-1', label: 'Title', startTime: 1, duration: 4, text: 'Amazing View', fontSize: 32, fontColor: '#ffffff', bgColor: 'rgba(0,0,0,0.5)', fadeIn: 0.5, fadeOut: 0.5 },
+        { id: 'clip-t2', type: 'text', trackId: 'track-text-1', label: 'Caption', startTime: 10, duration: 3, text: 'Nature is beautiful', fontSize: 24, fontColor: '#ffffff', bgColor: 'rgba(0,0,0,0.3)', fadeIn: 0.3, fadeOut: 0.3 },
+      ],
+    },
+  ];
+}
+
+// ─── useTimeline Hook ──────────────────────────────────────────────
+function useTimeline() {
+  const [tracks, setTracks] = useState(createInitialTracks);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(21);
+  const [zoom, setZoom] = useState(80);
+  const [selectedClipId, setSelectedClipId] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const animFrameRef = useRef(null);
+
+  useEffect(() => {
+    if (isPlaying) {
+      const startTime = performance.now();
+      const startCurrent = currentTime;
+      animFrameRef.current = requestAnimationFrame(function tick(now) {
+        const elapsed = (now - startTime) / 1000;
+        const next = startCurrent + elapsed;
+        if (next >= duration) {
+          setCurrentTime(duration);
+          setIsPlaying(false);
+          return;
+        }
+        setCurrentTime(next);
+        animFrameRef.current = requestAnimationFrame(tick);
+      });
+    } else {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    }
+    return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
+  }, [isPlaying, duration]);
+
+  const togglePlay = useCallback(() => {
+    if (currentTime >= duration) setCurrentTime(0);
+    setIsPlaying(p => !p);
+  }, [currentTime, duration]);
+
+  const seek = useCallback(t => setCurrentTime(clamp(t, 0, duration)), [duration]);
+  const skipFrame = useCallback(dir => {
+    setCurrentTime(t => clamp(t + dir * (1 / 30), 0, duration));
+  }, [duration]);
+  const selectClip = useCallback(id => setSelectedClipId(id), []);
+
+  const getSelectedClip = useCallback(() => {
+    if (!selectedClipId) return null;
+    for (const t of tracks) {
+      const found = t.clips.find(c => c.id === selectedClipId);
+      if (found) return found;
+    }
+    return null;
+  }, [tracks, selectedClipId]);
+
+  const updateClip = useCallback((clipId, changes) => {
+    setTracks(prev => prev.map(t => ({
+      ...t, clips: t.clips.map(c => c.id === clipId ? { ...c, ...changes } : c),
+    })));
+  }, []);
+
+  const splitClip = useCallback(() => {
+    setTracks(prev => {
+      const next = prev.map(t => ({ ...t, clips: [...t.clips] }));
+      for (const track of next) {
+        const idx = track.clips.findIndex(c =>
+          c.id === selectedClipId || (c.startTime < currentTime && c.startTime + c.duration > currentTime)
+        );
+        if (idx === -1) continue;
+        const clip = track.clips[idx];
+        const splitPoint = currentTime - clip.startTime;
+        if (splitPoint <= 0 || splitPoint >= clip.duration) continue;
+        const rightClip = {
+          ...clip,
+          id: clip.id + '-split-' + Date.now(),
+          startTime: currentTime,
+          duration: clip.duration - splitPoint,
+        };
+        track.clips[idx] = { ...clip, duration: splitPoint };
+        track.clips.splice(idx + 1, 0, rightClip);
+        break;
+      }
+      return next;
+    });
+  }, [currentTime, selectedClipId]);
+
+  const moveClip = useCallback((clipId, newStart) => {
+    setTracks(prev => prev.map(t => ({
+      ...t, clips: t.clips.map(c => c.id === clipId ? { ...c, startTime: Math.max(0, newStart) } : c),
+    })));
+  }, []);
+
+  const trimClip = useCallback((clipId, edge, delta) => {
+    setTracks(prev => prev.map(t => ({
+      ...t,
+      clips: t.clips.map(c => {
+        if (c.id !== clipId) return c;
+        if (edge === 'left') {
+          const maxTrim = c.duration - 0.5;
+          const trimAmount = clamp(delta, -c.startTime, maxTrim);
+          return { ...c, startTime: c.startTime + trimAmount, duration: c.duration - trimAmount };
+        }
+        return { ...c, duration: clamp(c.duration + delta, 0.5, 30) };
+      }),
+    })));
+  }, []);
+
+  const addClip = useCallback(clip => {
+    setTracks(prev => prev.map(t => t.id === clip.trackId ? { ...t, clips: [...t.clips, clip] } : t));
+  }, []);
+
+  const deleteClip = useCallback(clipId => {
+    setTracks(prev => prev.map(t => ({ ...t, clips: t.clips.filter(c => c.id !== clipId) })));
+    setSelectedClipId(prev => prev === clipId ? null : prev);
+  }, []);
+
+  const timeToX = useCallback(t => t * zoom, [zoom]);
+  const xToTime = useCallback(x => x / zoom, [zoom]);
+
+  return {
+    tracks, setTracks, currentTime, duration, zoom, setZoom,
+    selectedClipId, isPlaying, togglePlay, seek, skipFrame,
+    selectClip, getSelectedClip, updateClip, splitClip,
+    moveClip, trimClip, addClip, deleteClip, timeToX, xToTime,
+  };
+}
+
+// ─── Timeline Component ────────────────────────────────────────────
+const CLIP_COLORS = {
+  video: 'from-amber-500 to-orange-500',
+  audio: 'from-violet-500 to-purple-500',
+  text: 'from-emerald-500 to-teal-500',
+};
+const RULER_HEIGHT = 28;
+const TRACK_HEIGHT = 56;
+const TRACK_GAP = 6;
+
+function TrackClip({ clip, zoom, isSelected, onSelect, onDragStart, onTrimStart, onDelete }) {
+  const x = clip.startTime * zoom;
+  const w = Math.max(clip.duration * zoom, 20);
+  return React.createElement('div', {
+    className: `absolute top-1 bottom-1 rounded-md cursor-grab active:cursor-grabbing group select-none bg-gradient-to-r ${CLIP_COLORS[clip.type] || 'from-gray-500 to-gray-600'} ${isSelected ? 'ring-2 ring-white ring-offset-1 ring-offset-surface-900' : 'opacity-90'} hover:opacity-100 transition-opacity`,
+    style: { left: x, width: w },
+    onClick: e => { e.stopPropagation(); onSelect(); },
+    onMouseDown: e => { if (e.button === 0 && !e.target.dataset.trim) onDragStart(e, clip.id); },
+  },
+    React.createElement('div', {
+      'data-trim': 'left',
+      className: 'absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-white/30 rounded-l-md z-10',
+      onMouseDown: e => { e.stopPropagation(); onTrimStart(e, clip.id, 'left'); },
+    }),
+    React.createElement('div', {
+      'data-trim': 'right',
+      className: 'absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-white/30 rounded-r-md z-10',
+      onMouseDown: e => { e.stopPropagation(); onTrimStart(e, clip.id, 'right'); },
+    }),
+    React.createElement('div', { className: 'flex items-center h-full px-2 gap-2 text-white text-2xs font-medium truncate' },
+      React.createElement('span', { className: 'shrink-0 text-[10px]' },
+        clip.type === 'video' ? '\uD83C\uDFAC' : clip.type === 'audio' ? '\uD83C\uDFB5' : '\uD83D\uDCDD'
+      ),
+      React.createElement('span', { className: 'truncate' }, clip.label),
+      React.createElement('span', { className: 'shrink-0 ml-auto opacity-70' }, formatTime(clip.duration)),
+    ),
+    isSelected && React.createElement('button', {
+      className: 'absolute -top-2 -right-2 w-4 h-4 bg-red-500 rounded-full text-[10px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20',
+      onClick: e => { e.stopPropagation(); onDelete(); },
+    }, '\u2715')
+  );
+}
+
+function TimelineRuler({ duration, zoom, currentTime, onSeek }) {
+  const rulerRef = useRef(null);
+  const [hoverTime, setHoverTime] = useState(null);
+  const getTime = useCallback(e => {
+    if (!rulerRef.current) return 0;
+    return Math.max(0, (e.clientX - rulerRef.current.getBoundingClientRect().left) / zoom);
+  }, [zoom]);
+  const handleClick = useCallback(e => onSeek(getTime(e)), [getTime, onSeek]);
+  const handleMove = useCallback(e => setHoverTime(getTime(e)), [getTime]);
+  const majorInterval = zoom >= 150 ? 1 : zoom >= 60 ? 2 : 5;
+  const minorInterval = majorInterval / 2;
+  const ticks = [];
+  for (let t = 0; t <= duration; t += minorInterval) {
+    ticks.push({ time: t, isMajor: Math.abs(t % majorInterval) < 0.001 });
+  }
+  return React.createElement('div', {
+    ref: rulerRef,
+    className: 'relative h-full select-none',
+    onClick: handleClick,
+    onMouseMove: handleMove,
+    onMouseLeave: () => setHoverTime(null),
+  },
+    ticks.map(({ time, isMajor }) =>
+      React.createElement('div', {
+        key: time,
+        className: 'absolute top-0 flex flex-col items-center',
+        style: { left: time * zoom },
+      },
+        React.createElement('div', { className: `${isMajor ? 'h-3 w-px bg-surface-400' : 'h-1.5 w-px bg-surface-600'}` }),
+        isMajor && React.createElement('span', { className: 'text-2xs text-surface-400 mt-0.5' }, formatTime(time)),
+      )
+    ),
+    hoverTime !== null && React.createElement('div', {
+      className: 'absolute top-0 h-full w-px bg-white/20 z-10 pointer-events-none',
+      style: { left: hoverTime * zoom },
+    })
+  );
+}
+
+function Timeline({
+  tracks, currentTime, duration, zoom, selectedClipId, isPlaying,
+  onSeek, onSelectClip, onMoveClip, onTrimClip, onSplitClip, onDeleteClip, onZoomChange,
+  timeToX, xToTime,
+}) {
+  const containerRef = useRef(null);
+  const [dragState, setDragState] = useState(null);
+
+  const handleDragStart = useCallback((e, clipId) => {
+    e.preventDefault();
+    const clip = tracks.flatMap(t => t.clips).find(c => c.id === clipId);
+    if (!clip) return;
+    setDragState({ type: 'move', clipId, startX: e.clientX, initialValue: clip.startTime });
+  }, [tracks]);
+
+  const handleTrimStart = useCallback((e, clipId, edge) => {
+    e.preventDefault();
+    const clip = tracks.flatMap(t => t.clips).find(c => c.id === clipId);
+    if (!clip) return;
+    setDragState({ type: 'trim', clipId, edge, startX: e.clientX, initialValue: edge === 'left' ? clip.startTime : clip.duration });
+  }, [tracks]);
+
+  useEffect(() => {
+    const handleMove = e => {
+      if (!dragState) return;
+      const delta = (e.clientX - dragState.startX) / zoom;
+      if (dragState.type === 'move') onMoveClip(dragState.clipId, dragState.initialValue + delta);
+      else if (dragState.type === 'trim') onTrimClip(dragState.clipId, dragState.edge, delta);
+    };
+    const handleUp = () => setDragState(null);
+    if (dragState) {
+      document.addEventListener('mousemove', handleMove);
+      document.addEventListener('mouseup', handleUp);
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleUp);
+    };
+  }, [dragState, zoom, onMoveClip, onTrimClip]);
+
+  const totalWidth = Math.max(duration * zoom + 100, 800);
+
+  const handleTimelineClick = useCallback(e => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left + containerRef.current.scrollLeft;
+    onSeek(x / zoom);
+    onSelectClip(null);
+  }, [zoom, onSeek, onSelectClip]);
+
+  return React.createElement('div', { className: 'flex flex-col bg-surface-900 border-t border-surface-700 select-none' },
+    // Toolbar
+    React.createElement('div', { className: 'flex items-center justify-between px-3 py-1.5 border-b border-surface-700 bg-surface-800' },
+      React.createElement('div', { className: 'flex items-center gap-2' },
+        React.createElement('span', { className: 'text-xs font-medium text-surface-300' }, 'Timeline'),
+        React.createElement('button', {
+          onClick: onSplitClip,
+          disabled: !selectedClipId,
+          className: 'px-2 py-0.5 text-2xs bg-surface-700 hover:bg-surface-600 rounded text-surface-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors',
+        }, 'Split (S)'),
+      ),
+      React.createElement('div', { className: 'flex items-center gap-2' },
+        React.createElement('span', { className: 'text-2xs text-surface-400' }, formatTime(currentTime)),
+        React.createElement('div', { className: 'flex items-center gap-1' },
+          React.createElement('button', {
+            onClick: () => onZoomChange(Math.max(20, zoom - 20)),
+            className: 'w-5 h-5 flex items-center justify-center text-xs bg-surface-700 hover:bg-surface-600 rounded text-surface-300',
+          }, '\u2212'),
+          React.createElement('input', {
+            type: 'range', min: 20, max: 300, step: 10, value: zoom,
+            onChange: e => onZoomChange(Number(e.target.value)),
+            className: 'w-20 h-1 accent-blue-500 cursor-pointer',
+          }),
+          React.createElement('button', {
+            onClick: () => onZoomChange(Math.min(300, zoom + 20)),
+            className: 'w-5 h-5 flex items-center justify-center text-xs bg-surface-700 hover:bg-surface-600 rounded text-surface-300',
+          }, '+'),
+        ),
+      ),
+    ),
+    // Body
+    React.createElement('div', {
+      ref: containerRef,
+      className: 'overflow-x-auto overflow-y-auto relative',
+      style: { maxHeight: '260px' },
+      onClick: handleTimelineClick,
+    },
+      React.createElement('div', { style: { width: totalWidth } },
+        React.createElement('div', { style: { height: RULER_HEIGHT }, className: 'bg-surface-900 border-b border-surface-700 sticky top-0 z-10' },
+          React.createElement(TimelineRuler, { duration, zoom, currentTime, onSeek })
+        ),
+        tracks.map((track, idx) =>
+          React.createElement('div', {
+            key: track.id,
+            className: 'relative',
+            style: { height: TRACK_HEIGHT, marginTop: idx > 0 ? TRACK_GAP : 0 },
+          },
+            React.createElement('div', { className: 'absolute inset-0 bg-surface-900/80 border-b border-surface-800' }),
+            React.createElement('div', { className: 'absolute left-0 top-0 bottom-0 w-24 flex items-center px-2 z-10 bg-surface-900/90 border-r border-surface-700' },
+              React.createElement('div', { className: 'flex items-center gap-1.5' },
+                React.createElement('span', { className: 'text-[10px]' },
+                  track.kind === 'video' ? '\uD83C\uDFAC' : track.kind === 'audio' ? '\uD83C\uDFB5' : '\uD83D\uDCDD'
+                ),
+                React.createElement('span', { className: 'text-2xs text-surface-300 truncate' }, track.label),
+              ),
+            ),
+            React.createElement('div', { className: 'absolute inset-0', style: { left: 96 } },
+              track.clips.map(clip =>
+                React.createElement(TrackClip, {
+                  key: clip.id,
+                  clip, zoom,
+                  isSelected: selectedClipId === clip.id,
+                  onSelect: () => onSelectClip(clip.id),
+                  onDragStart: handleDragStart,
+                  onTrimStart: handleTrimStart,
+                  onDelete: () => onDeleteClip(clip.id),
+                })
+              ),
+            ),
+          )
+        ),
+      ),
+      React.createElement('div', {
+        className: 'absolute top-0 w-0.5 bg-red-500 z-20 pointer-events-none shadow-lg shadow-red-500/30',
+        style: {
+          left: currentTime * zoom,
+          height: RULER_HEIGHT + (tracks.length * (TRACK_HEIGHT + TRACK_GAP)),
+        },
+      },
+        React.createElement('div', { className: 'w-2.5 h-2.5 bg-red-500 rounded-full -ml-[4.5px] -mt-1' }),
+      ),
+    ),
+  );
+}
+
+// ─── PreviewPlayer Component ───────────────────────────────────────
+function PreviewPlayer({ currentTime, duration, isPlaying, selectedClip, tracks, onTogglePlay, onSeek, onSkipFrame }) {
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [volume, setVolume] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const currentAspect = ASPECT_RATIOS.find(r => r.value === aspectRatio) || ASPECT_RATIOS[0];
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, w, h);
+    const visibleClips = tracks.flatMap(t => t.clips);
+    let drawn = false;
+    for (const clip of visibleClips) {
+      const localTime = currentTime - clip.startTime;
+      if (localTime < 0 || localTime > clip.duration) continue;
+      drawn = true;
+      if (clip.type === 'text') {
+        ctx.save();
+        if (clip.bgColor) { ctx.fillStyle = clip.bgColor; ctx.fillRect(0, h * 0.3, w, h * 0.15); }
+        ctx.fillStyle = clip.fontColor || '#ffffff';
+        ctx.font = `bold ${(clip.fontSize || 32) * (w / 640)}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(clip.text || '', w / 2, h * 0.375);
+        ctx.restore();
+      } else {
+        const progress = localTime / clip.duration;
+        const grad = ctx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, clip.color || '#3b82f6');
+        grad.addColorStop(progress, clip.color || '#3b82f6');
+        grad.addColorStop(progress + 0.01, '#ffffff');
+        grad.addColorStop(1, '#1e293b');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.font = `600 ${Math.round(w * 0.04)}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(clip.label, w / 2, h / 2 - 20);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = `${Math.round(w * 0.025)}px system-ui, sans-serif`;
+        ctx.fillText(formatTime(localTime) + ' / ' + formatTime(clip.duration), w / 2, h / 2 + 20);
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.moveTo(w / 2 - w * 0.03, h / 2 + 26);
+        ctx.lineTo(w / 2 + w * 0.03, h / 2 + 26);
+        ctx.lineTo(w / 2, h / 2 + 32);
+        ctx.closePath();
+        ctx.fill();
+      }
+      break;
+    }
+    if (!drawn) {
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#475569';
+      ctx.font = `${Math.round(w * 0.035)}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Add media to timeline', w / 2, h / 2);
+    }
+  }, [currentTime, tracks]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(() => {
+      const cvs = canvasRef.current;
+      const rect = el.getBoundingClientRect();
+      if (cvs) { cvs.width = rect.width - 4; cvs.height = rect.height - 4; }
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleKey = e => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') { e.preventDefault(); onTogglePlay(); }
+      if (e.key === 'ArrowLeft') onSkipFrame(-1);
+      if (e.key === 'ArrowRight') onSkipFrame(1);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onTogglePlay, onSkipFrame]);
+
+  return React.createElement('div', { className: 'flex flex-col h-full bg-surface-950' },
+    React.createElement('div', {
+      ref: containerRef,
+      className: 'flex-1 flex items-center justify-center bg-black relative overflow-hidden group',
+    },
+      React.createElement('div', {
+        className: 'relative bg-black/95 rounded-lg overflow-hidden shadow-2xl transition-all duration-300',
+        style: {
+          aspectRatio: `${currentAspect.w} / ${currentAspect.h}`,
+          maxWidth: '100%', maxHeight: '100%',
+        },
+      },
+        React.createElement('canvas', { ref: canvasRef, className: 'w-full h-full object-contain' }),
+      ),
+      React.createElement('div', { className: 'absolute top-2 right-2 flex gap-1' },
+        ASPECT_RATIOS.map(ar =>
+          React.createElement('button', {
+            key: ar.value,
+            onClick: () => setAspectRatio(ar.value),
+            className: `px-2 py-1 rounded text-2xs font-medium transition-all ${aspectRatio === ar.value ? 'bg-blue-600 text-white shadow-lg' : 'bg-surface-800/80 text-surface-300 hover:bg-surface-700'}`,
+            title: ar.label,
+          }, `${ar.value}`)
+        ),
+      ),
+      React.createElement('div', { className: 'absolute bottom-14 left-2 bg-black/60 px-2 py-0.5 rounded text-xs font-mono text-white' },
+        `${formatTime(currentTime)} / ${formatTime(duration)}`
+      ),
+    ),
+    React.createElement('div', { className: 'flex items-center justify-center gap-3 px-4 py-2 bg-surface-900 border-t border-surface-700' },
+      React.createElement('button', {
+        onClick: () => onSkipFrame(-1),
+        className: 'w-8 h-8 flex items-center justify-center rounded-md bg-surface-800 hover:bg-surface-700 text-surface-300 hover:text-white transition-all',
+        title: 'Previous frame (\u2190)',
+      }, '\u23EE'),
+      React.createElement('button', {
+        onClick: onTogglePlay,
+        className: 'w-10 h-10 flex items-center justify-center rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition-all hover:scale-105 active:scale-95',
+        title: 'Play/Pause (Space)',
+      }, isPlaying ? '\u23F8' : '\u25B6'),
+      React.createElement('button', {
+        onClick: () => onSkipFrame(1),
+        className: 'w-8 h-8 flex items-center justify-center rounded-md bg-surface-800 hover:bg-surface-700 text-surface-300 hover:text-white transition-all',
+        title: 'Next frame (\u2192)',
+      }, '\u23ED'),
+      React.createElement('div', { className: 'flex-1 max-w-[300px] mx-2' },
+        React.createElement('input', {
+          type: 'range', min: 0, max: duration, step: 0.01, value: currentTime,
+          onChange: e => onSeek(Number(e.target.value)),
+          className: 'w-full h-1 accent-blue-500 cursor-pointer',
+        }),
+      ),
+      React.createElement('div', { className: 'flex items-center gap-1.5' },
+        React.createElement('span', { className: 'text-xs text-surface-400' },
+          volume === 0 ? '\uD83D\uDD07' : volume < 0.5 ? '\uD83D\uDD09' : '\uD83D\uDD0A'
+        ),
+        React.createElement('input', {
+          type: 'range', min: 0, max: 1, step: 0.05, value: volume,
+          onChange: e => setVolume(Number(e.target.value)),
+          className: 'w-16 h-1 accent-blue-500 cursor-pointer',
+        }),
+      ),
+    ),
+  );
+}
+
+// ─── PropertiesPanel Component ─────────────────────────────────────
+function PropertySlider({ label, value, min, max, step, display, onChange }) {
+  return React.createElement('div', { className: 'space-y-1.5' },
+    React.createElement('div', { className: 'flex justify-between items-center' },
+      React.createElement('label', { className: 'text-2xs text-surface-400 font-medium' }, label),
+      React.createElement('span', { className: 'text-2xs text-surface-500 font-mono' }, display),
+    ),
+    React.createElement('input', {
+      type: 'range', min, max, step, value,
+      onChange: e => onChange(Number(e.target.value)),
+      className: 'w-full h-1 accent-blue-500 cursor-pointer',
+    }),
+  );
+}
+
+function PropertiesPanel({ clip, onUpdateClip }) {
+  if (!clip) {
+    return React.createElement('div', { className: 'flex flex-col h-full bg-surface-900 border-l border-surface-700' },
+      React.createElement('div', { className: 'p-3 border-b border-surface-700' },
+        React.createElement('h3', { className: 'text-xs font-medium text-surface-300' }, 'Properties'),
+      ),
+      React.createElement('div', { className: 'flex-1 flex items-center justify-center p-6' },
+        React.createElement('div', { className: 'text-center' },
+          React.createElement('span', { className: 'text-2xl text-surface-600 block mb-2' }, '\uD83D\uDC46'),
+          React.createElement('p', { className: 'text-xs text-surface-500' }, 'Select a clip on the timeline to view its properties'),
+        ),
+      ),
+    );
+  }
+  return React.createElement('div', { className: 'flex flex-col h-full bg-surface-900 border-l border-surface-700 overflow-y-auto' },
+    React.createElement('div', { className: 'p-3 border-b border-surface-700' },
+      React.createElement('h3', { className: 'text-xs font-medium text-surface-300' }, 'Properties'),
+      React.createElement('p', { className: 'text-2xs text-surface-500 mt-0.5' }, clip.label),
+    ),
+    React.createElement('div', { className: 'p-3 space-y-4' },
+      clip.type === 'video' && React.createElement(React.Fragment, null,
+        React.createElement(PropertySlider, { label: 'Speed', value: clip.speed ?? 1, min: 0.25, max: 4, step: 0.25, display: `${clip.speed ?? 1}x`, onChange: v => onUpdateClip(clip.id, { speed: v }) }),
+        React.createElement(PropertySlider, { label: 'Volume', value: clip.volume ?? 1, min: 0, max: 2, step: 0.05, display: `${Math.round((clip.volume ?? 1) * 100)}%`, onChange: v => onUpdateClip(clip.id, { volume: v }) }),
+        React.createElement(PropertySlider, { label: 'Opacity', value: clip.opacity ?? 1, min: 0, max: 1, step: 0.05, display: `${Math.round((clip.opacity ?? 1) * 100)}%`, onChange: v => onUpdateClip(clip.id, { opacity: v }) }),
+      ),
+      clip.type === 'audio' && React.createElement(PropertySlider, { label: 'Volume', value: clip.volume ?? 1, min: 0, max: 2, step: 0.05, display: `${Math.round((clip.volume ?? 1) * 100)}%`, onChange: v => onUpdateClip(clip.id, { volume: v }) }),
+      clip.type === 'text' && React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'space-y-1.5' },
+          React.createElement('label', { className: 'text-2xs text-surface-400 font-medium' }, 'Text Content'),
+          React.createElement('input', {
+            type: 'text', value: clip.text || '',
+            onChange: e => onUpdateClip(clip.id, { text: e.target.value }),
+            className: 'w-full px-2 py-1.5 bg-surface-800 border border-surface-600 rounded text-xs text-white focus:outline-none focus:border-blue-500',
+          }),
+        ),
+        React.createElement(PropertySlider, { label: 'Font Size', value: clip.fontSize ?? 24, min: 10, max: 96, step: 1, display: `${clip.fontSize ?? 24}px`, onChange: v => onUpdateClip(clip.id, { fontSize: v }) }),
+        React.createElement('div', { className: 'space-y-1.5' },
+          React.createElement('label', { className: 'text-2xs text-surface-400 font-medium' }, 'Text Color'),
+          React.createElement('input', {
+            type: 'color', value: clip.fontColor || '#ffffff',
+            onChange: e => onUpdateClip(clip.id, { fontColor: e.target.value }),
+            className: 'w-full h-8 rounded cursor-pointer bg-surface-800 border border-surface-600',
+          }),
+        ),
+        React.createElement('div', { className: 'space-y-1.5' },
+          React.createElement('label', { className: 'text-2xs text-surface-400 font-medium' }, 'Background'),
+          React.createElement('input', {
+            type: 'color', value: clip.bgColor && clip.bgColor !== 'rgba(0,0,0,0.5)' ? clip.bgColor : '#000000',
+            onChange: e => onUpdateClip(clip.id, { bgColor: e.target.value + '80' }),
+            className: 'w-full h-8 rounded cursor-pointer bg-surface-800 border border-surface-600',
+          }),
+        ),
+        React.createElement(PropertySlider, { label: 'Fade In', value: clip.fadeIn ?? 0, min: 0, max: 3, step: 0.1, display: `${clip.fadeIn ?? 0}s`, onChange: v => onUpdateClip(clip.id, { fadeIn: v }) }),
+        React.createElement(PropertySlider, { label: 'Fade Out', value: clip.fadeOut ?? 0, min: 0, max: 3, step: 0.1, display: `${clip.fadeOut ?? 0}s`, onChange: v => onUpdateClip(clip.id, { fadeOut: v }) }),
+      ),
+      clip.type === 'video' && React.createElement('div', { className: 'space-y-2' },
+        React.createElement('label', { className: 'text-2xs text-surface-400 font-medium block' }, 'Filters'),
+        React.createElement('div', { className: 'grid grid-cols-4 gap-1.5' },
+          FILTER_PRESETS.map(f =>
+            React.createElement('button', {
+              key: f.id,
+              onClick: () => onUpdateClip(clip.id, { filter: f.id }),
+              className: `flex flex-col items-center gap-0.5 p-1.5 rounded-md transition-colors ${clip.filter === f.id ? 'bg-blue-600/30 ring-1 ring-blue-500' : 'bg-surface-800 hover:bg-surface-700'}`,
+            },
+              React.createElement('div', { className: `w-full aspect-square rounded bg-gradient-to-br from-surface-600 to-surface-500 flex items-center justify-center ${f.cls}` },
+                React.createElement('span', { className: 'text-lg opacity-60' }, '\u25C9'),
+              ),
+              React.createElement('span', { className: 'text-2xs text-surface-400 truncate w-full text-center' }, f.name),
+            )
+          ),
+        ),
+      ),
+      React.createElement('div', { className: 'pt-2 border-t border-surface-700 space-y-1' },
+        React.createElement('div', { className: 'flex justify-between text-2xs' },
+          React.createElement('span', { className: 'text-surface-500' }, 'Start'),
+          React.createElement('span', { className: 'text-surface-300 font-mono' }, `${clip.startTime.toFixed(2)}s`),
+        ),
+        React.createElement('div', { className: 'flex justify-between text-2xs' },
+          React.createElement('span', { className: 'text-surface-500' }, 'Duration'),
+          React.createElement('span', { className: 'text-surface-300 font-mono' }, `${clip.duration.toFixed(2)}s`),
+        ),
+        React.createElement('div', { className: 'flex justify-between text-2xs' },
+          React.createElement('span', { className: 'text-surface-500' }, 'End'),
+          React.createElement('span', { className: 'text-surface-300 font-mono' }, `${(clip.startTime + clip.duration).toFixed(2)}s`),
+        ),
+      ),
+    ),
+  );
+}
+
+// ─── ExportModal Component ─────────────────────────────────────────
+function ExportModal({ isOpen, onClose }) {
+  const [resolution, setResolution] = useState('1080p');
+  const [fps, setFps] = useState(30);
+  const [isExporting, setIsExporting] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [showComplete, setShowComplete] = useState(false);
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen) { setIsExporting(false); setProgress(0); setShowComplete(false); }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleEsc = e => { if (e.key === 'Escape' && !isExporting) onClose(); };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isExporting, onClose]);
+
+  const startExport = () => {
+    setIsExporting(true); setProgress(0); setShowComplete(false);
+    let p = 0;
+    intervalRef.current = setInterval(() => {
+      p += Math.random() * 8 + 2;
+      if (p >= 100) {
+        p = 100; clearInterval(intervalRef.current);
+        setIsExporting(false); setShowComplete(true);
+      }
+      setProgress(Math.min(p, 100));
+    }, 300);
+  };
+
+  useEffect(() => {
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, []);
+
+  if (!isOpen) return null;
+  const res = RESOLUTIONS.find(r => r.label === resolution) || RESOLUTIONS[0];
+
+  return React.createElement('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm' },
+    React.createElement('div', { className: 'bg-surface-800 rounded-xl shadow-2xl border border-surface-700 w-full max-w-md mx-4 overflow-hidden animate-in' },
+      React.createElement('div', { className: 'flex items-center justify-between px-5 py-4 border-b border-surface-700' },
+        React.createElement('div', { className: 'flex items-center gap-2' },
+          React.createElement('span', { className: 'text-lg' }, '\uD83D\uDCE4'),
+          React.createElement('h2', { className: 'text-sm font-semibold text-surface-100' }, 'Export Video'),
+        ),
+        React.createElement('button', {
+          onClick: onClose, disabled: isExporting,
+          className: 'w-7 h-7 flex items-center justify-center rounded-md bg-surface-700 hover:bg-surface-600 text-surface-400 hover:text-white disabled:opacity-40 transition-colors text-xs',
+        }, '\u2715'),
+      ),
+      React.createElement('div', { className: 'p-5 space-y-5' },
+        React.createElement('div', null,
+          React.createElement('label', { className: 'text-2xs text-surface-400 font-medium mb-2 block' }, 'Resolution'),
+          React.createElement('div', { className: 'grid grid-cols-2 gap-2' },
+            RESOLUTIONS.map(r =>
+              React.createElement('button', {
+                key: r.label,
+                onClick: () => setResolution(r.label),
+                className: `flex flex-col items-center py-3 rounded-lg border transition-all ${resolution === r.label ? 'border-blue-500 bg-blue-600/20 text-blue-300' : 'border-surface-600 bg-surface-900 text-surface-400 hover:border-surface-500'}`,
+              },
+                React.createElement('span', { className: 'text-sm font-semibold' }, r.label),
+                React.createElement('span', { className: 'text-2xs opacity-70' }, `${r.w}\u00D7${r.h}`),
+              )
+            ),
+          ),
+        ),
+        React.createElement('div', null,
+          React.createElement('label', { className: 'text-2xs text-surface-400 font-medium mb-2 block' }, 'Frame Rate'),
+          React.createElement('div', { className: 'flex gap-2' },
+            FPS_OPTIONS.map(f =>
+              React.createElement('button', {
+                key: f,
+                onClick: () => setFps(f),
+                className: `flex-1 py-2 rounded-lg border text-xs font-medium transition-all ${fps === f ? 'border-blue-500 bg-blue-600/20 text-blue-300' : 'border-surface-600 bg-surface-900 text-surface-400 hover:border-surface-500'}`,
+              }, `${f} FPS`)
+            ),
+          ),
+        ),
+        React.createElement('div', { className: 'bg-surface-900 rounded-lg p-3 space-y-1.5' },
+          React.createElement('div', { className: 'flex justify-between text-2xs' },
+            React.createElement('span', { className: 'text-surface-500' }, 'Format'),
+            React.createElement('span', { className: 'text-surface-300' }, 'MP4 (H.264)'),
+          ),
+          React.createElement('div', { className: 'flex justify-between text-2xs' },
+            React.createElement('span', { className: 'text-surface-500' }, 'Dimensions'),
+            React.createElement('span', { className: 'text-surface-300' }, `${res.w} \u00D7 ${res.h}`),
+          ),
+          React.createElement('div', { className: 'flex justify-between text-2xs' },
+            React.createElement('span', { className: 'text-surface-500' }, 'FPS'),
+            React.createElement('span', { className: 'text-surface-300' }, fps),
+          ),
+        ),
+        (isExporting || showComplete) && React.createElement('div', { className: 'space-y-2' },
+          React.createElement('div', { className: 'flex justify-between text-2xs' },
+            React.createElement('span', { className: 'text-surface-400' }, showComplete ? 'Render complete!' : 'Rendering...'),
+            React.createElement('span', { className: 'text-surface-300 font-mono' }, `${Math.round(progress)}%`),
+          ),
+          React.createElement('div', { className: 'w-full h-2 bg-surface-900 rounded-full overflow-hidden' },
+            React.createElement('div', {
+              className: `h-full rounded-full transition-all duration-300 ${showComplete ? 'bg-green-500' : 'bg-gradient-to-r from-blue-500 to-purple-500'}`,
+              style: { width: `${progress}%` },
+            }),
+          ),
+          showComplete && React.createElement('div', { className: 'flex items-center gap-1.5 text-green-400 text-2xs' },
+            React.createElement('span', null, '\u2705'),
+            React.createElement('span', null, 'Export complete \u2014 video saved'),
+          ),
+        ),
+      ),
+      React.createElement('div', { className: 'px-5 py-3 border-t border-surface-700 flex justify-end gap-2' },
+        React.createElement('button', {
+          onClick: onClose, disabled: isExporting,
+          className: 'px-4 py-1.5 text-xs text-surface-300 bg-surface-700 hover:bg-surface-600 disabled:opacity-40 rounded-md transition-colors',
+        }, showComplete ? 'Close' : 'Cancel'),
+        !isExporting && !showComplete && React.createElement('button', {
+          onClick: startExport,
+          className: 'px-5 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-md transition-colors shadow-lg shadow-blue-600/20',
+        }, 'Export'),
+      ),
+    ),
+  );
+}
+
+// ─── Sidebar Component ─────────────────────────────────────────────
+const SIDEBAR_TABS = [
+  { id: 'media', label: 'Media', icon: '\uD83D\uDCC1' },
+  { id: 'text', label: 'Text', icon: '\uD83D\uDCDD' },
+  { id: 'transitions', label: 'Transitions', icon: '\uD83D\uDD04' },
+  { id: 'stickers', label: 'Stickers', icon: '\uD83C\uDF1F' },
+  { id: 'audio', label: 'Audio', icon: '\uD83C\uDFB5' },
+];
+
+const STOCK_VIDEOS = [
+  { name: 'Beach Sunset', color: '#f59e0b' },
+  { name: 'City Timelapse', color: '#3b82f6' },
+  { name: 'Mountain View', color: '#10b981' },
+  { name: 'Ocean Waves', color: '#06b6d4' },
+];
+
+const TEXT_TEMPLATES = ['Title', 'Subtitle', 'Caption', 'Quote'];
+
+function Sidebar({ activeTab, onTabChange, onAddText, onAddClip, tracks }) {
+  const [textInput, setTextInput] = useState('');
+  const fileInputRef = useRef(null);
+
+  const handleUpload = e => {
+    const files = e.target.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      const type = file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : null;
+      if (!type) continue;
+      const trackId = type === 'video' ? 'track-video-1' : 'track-audio-1';
+      const track = tracks.find(t => t.id === trackId);
+      const start = track && track.clips.length ? Math.max(...track.clips.map(c => c.startTime + c.duration)) : 0;
+      onAddClip({
+        id: 'clip-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        type, trackId, label: file.name.replace(/\.[^/.]+$/, ''),
+        startTime: start, duration: 5,
+        color: type === 'video' ? '#3b82f6' : '#8b5cf6',
+        volume: 1, speed: 1, opacity: 1,
+      });
+    }
+    e.target.value = '';
+  };
+
+  const handleAddText = () => {
+    if (!textInput.trim()) return;
+    const track = tracks.find(t => t.kind === 'text');
+    if (!track) return;
+    const lastEnd = track.clips.length ? Math.max(...track.clips.map(c => c.startTime + c.duration)) : 0;
+    onAddClip({
+      id: 'text-' + Date.now(),
+      type: 'text', trackId: track.id,
+      label: textInput.trim().slice(0, 20),
+      text: textInput.trim(),
+      startTime: lastEnd, duration: 4,
+      fontSize: 32, fontColor: '#ffffff',
+      bgColor: 'rgba(0,0,0,0.5)',
+      fadeIn: 0.5, fadeOut: 0.5,
+    });
+    setTextInput('');
+  };
+
+  function addStockVideo(name, color) {
+    const trackId = 'track-video-1';
+    const track = tracks.find(t => t.id === trackId);
+    const start = track && track.clips.length ? Math.max(...track.clips.map(c => c.startTime + c.duration)) : 0;
+    onAddClip({
+      id: 'stock-' + Date.now(),
+      type: 'video', trackId, label: name,
+      startTime: start, duration: 5, color,
+      volume: 1, speed: 1, opacity: 1,
+    });
+  }
+
+  function addTextTemplate(t) {
+    const track = tracks.find(t => t.kind === 'text');
+    if (!track) return;
+    const lastEnd = track.clips.length ? Math.max(...track.clips.map(c => c.startTime + c.duration)) : 0;
+    onAddClip({
+      id: 'text-' + Date.now(),
+      type: 'text', trackId: track.id,
+      label: t + ' Text',
+      text: t + ' Text',
+      startTime: lastEnd, duration: 4,
+      fontSize: 32, fontColor: '#ffffff',
+      bgColor: 'rgba(0,0,0,0.5)',
+      fadeIn: 0.5, fadeOut: 0.5,
+    });
+  }
+
+  const tabContent = () => {
+    switch (activeTab) {
+      case 'media':
+        return React.createElement('div', { className: 'space-y-3' },
+          React.createElement('button', {
+            onClick: () => fileInputRef.current?.click(),
+            className: 'w-full py-8 border-2 border-dashed border-surface-600 rounded-lg hover:border-blue-500 hover:bg-surface-800/50 transition-all group cursor-pointer',
+          },
+            React.createElement('div', { className: 'flex flex-col items-center gap-1' },
+              React.createElement('span', { className: 'text-2xl text-surface-400 group-hover:text-blue-400 transition-colors' }, '\uD83D\uDCE4'),
+              React.createElement('span', { className: 'text-xs text-surface-400 group-hover:text-surface-200' }, 'Upload Media'),
+              React.createElement('span', { className: 'text-2xs text-surface-500' }, 'MP4, MOV, MP3, WAV'),
+            ),
+          ),
+          React.createElement('input', { ref: fileInputRef, type: 'file', accept: 'video/*,audio/*', multiple: true, className: 'hidden', onChange: handleUpload }),
+          React.createElement('div', { className: 'space-y-1' },
+            React.createElement('span', { className: 'text-xs text-surface-400 font-medium' }, 'Stock Videos'),
+            STOCK_VIDEOS.map((sv, i) =>
+              React.createElement('div', {
+                key: i,
+                className: 'flex items-center gap-2 p-2 rounded-md bg-surface-800 hover:bg-surface-700 cursor-pointer transition-colors',
+                onClick: () => addStockVideo(sv.name, sv.color),
+              },
+                React.createElement('div', {
+                  className: 'w-10 h-10 rounded bg-gradient-to-br flex items-center justify-center text-white text-xs',
+                  style: { background: `linear-gradient(135deg, ${sv.color}, ${sv.color}dd)` },
+                }, '\uD83C\uDFAC'),
+                React.createElement('div', { className: 'flex-1 min-w-0' },
+                  React.createElement('div', { className: 'text-xs text-surface-200 truncate' }, sv.name),
+                  React.createElement('div', { className: 'text-2xs text-surface-500' }, '00:05'),
+                ),
+                React.createElement('span', { className: 'text-surface-500 text-xs' }, '+'),
+              )
+            ),
+          ),
+        );
+      case 'text':
+        return React.createElement('div', { className: 'space-y-3' },
+          React.createElement('div', { className: 'space-y-2' },
+            React.createElement('label', { className: 'text-xs text-surface-400 font-medium' }, 'Add Text Overlay'),
+            React.createElement('div', { className: 'flex gap-2' },
+              React.createElement('input', {
+                type: 'text', value: textInput,
+                onChange: e => setTextInput(e.target.value),
+                onKeyDown: e => e.key === 'Enter' && handleAddText(),
+                placeholder: 'Enter text...',
+                className: 'flex-1 px-3 py-1.5 bg-surface-800 border border-surface-600 rounded text-xs text-white placeholder-surface-500 focus:outline-none focus:border-blue-500',
+              }),
+              React.createElement('button', {
+                onClick: handleAddText,
+                disabled: !textInput.trim(),
+                className: 'px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-surface-700 disabled:text-surface-500 rounded text-xs font-medium transition-colors',
+              }, 'Add'),
+            ),
+          ),
+          React.createElement('div', { className: 'space-y-1' },
+            React.createElement('span', { className: 'text-xs text-surface-400 font-medium' }, 'Templates'),
+            TEXT_TEMPLATES.map((t, i) =>
+              React.createElement('div', {
+                key: i,
+                className: 'flex items-center gap-2 p-2 rounded-md bg-surface-800 hover:bg-surface-700 cursor-pointer transition-colors',
+                onClick: () => addTextTemplate(t),
+              },
+                React.createElement('div', { className: 'w-8 h-8 rounded bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white text-xs' }, 'T'),
+                React.createElement('span', { className: 'text-xs text-surface-200' }, t),
+              )
+            ),
+          ),
+        );
+      case 'transitions':
+        return React.createElement('div', { className: 'space-y-1' },
+          React.createElement('span', { className: 'text-xs text-surface-400 font-medium mb-2 block' }, 'Transitions'),
+          React.createElement('div', { className: 'grid grid-cols-2 gap-2' },
+            DEFAULT_TRANSITIONS.map(t =>
+              React.createElement('div', {
+                key: t.id,
+                className: 'flex flex-col items-center gap-1 p-3 rounded-lg bg-surface-800 hover:bg-surface-700 cursor-pointer transition-colors group',
+              },
+                React.createElement('div', { className: 'w-full aspect-video rounded bg-surface-700 flex items-center justify-center text-xl text-surface-300 group-hover:text-blue-400 transition-colors' }, t.icon),
+                React.createElement('span', { className: 'text-2xs text-surface-400' }, t.name),
+              )
+            ),
+          ),
+        );
+      case 'stickers':
+        return React.createElement('div', { className: 'space-y-1' },
+          React.createElement('span', { className: 'text-xs text-surface-400 font-medium mb-2 block' }, 'Stickers'),
+          React.createElement('div', { className: 'grid grid-cols-3 gap-2' },
+            STICKERS.map(s =>
+              React.createElement('div', {
+                key: s.id,
+                className: 'flex flex-col items-center gap-1 p-3 rounded-lg bg-surface-800 hover:bg-surface-700 cursor-pointer transition-colors group',
+              },
+                React.createElement('span', { className: 'text-2xl group-hover:scale-110 transition-transform' }, s.emoji),
+                React.createElement('span', { className: 'text-2xs text-surface-400' }, s.name),
+              )
+            ),
+          ),
+        );
+      case 'audio':
+        return React.createElement('div', { className: 'space-y-3' },
+          React.createElement('div', { className: 'space-y-1' },
+            React.createElement('span', { className: 'text-xs text-surface-400 font-medium' }, 'Sound Effects'),
+            AUDIO_EFFECTS.map(e =>
+              React.createElement('div', {
+                key: e.id,
+                className: 'flex items-center gap-2 p-2 rounded-md bg-surface-800 hover:bg-surface-700 cursor-pointer transition-colors',
+              },
+                React.createElement('span', { className: 'text-sm text-surface-300' }, e.icon),
+                React.createElement('span', { className: 'text-xs text-surface-200' }, e.name),
+              )
+            ),
+          ),
+        );
+    }
+  };
+
+  return React.createElement('div', { className: 'flex flex-col h-full bg-surface-900 border-r border-surface-700' },
+    React.createElement('div', { className: 'flex border-b border-surface-700' },
+      SIDEBAR_TABS.map(tab =>
+        React.createElement('button', {
+          key: tab.id,
+          onClick: () => onTabChange(tab.id),
+          className: `flex-1 flex flex-col items-center py-2 text-2xs font-medium transition-all ${activeTab === tab.id ? 'text-blue-400 bg-surface-800 border-b-2 border-blue-500' : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800/50'}`,
+        },
+          React.createElement('span', { className: 'text-sm' }, tab.icon),
+          React.createElement('span', { className: 'mt-0.5' }, tab.label),
+        )
+      ),
+    ),
+    React.createElement('div', { className: 'flex-1 overflow-y-auto p-3' }, tabContent()),
+  );
+}
+
+// ─── App Component ─────────────────────────────────────────────────
+function App() {
+  const [sidebarTab, setSidebarTab] = useState('media');
+  const [showExport, setShowExport] = useState(false);
+  const tl = useTimeline();
+
+  useEffect(() => {
+    const handleKey = e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key.toLowerCase() === 's' && tl.selectedClipId) { e.preventDefault(); tl.splitClip(); }
+      if (e.key === 'Delete' || e.key === 'Backspace') { if (tl.selectedClipId) { e.preventDefault(); tl.deleteClip(tl.selectedClipId); } }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [tl.selectedClipId, tl.splitClip, tl.deleteClip]);
+
+  const selectedClip = tl.getSelectedClip();
+
+  return React.createElement('div', { className: 'h-screen w-screen flex flex-col bg-surface-950 text-white overflow-hidden' },
+    React.createElement('header', { className: 'flex items-center justify-between px-4 py-2 bg-surface-900 border-b border-surface-700 shrink-0' },
+      React.createElement('div', { className: 'flex items-center gap-3' },
+        React.createElement('div', { className: 'flex items-center gap-1.5' },
+          React.createElement('span', { className: 'text-lg' }, '\uD83C\uDFAC'),
+          React.createElement('span', { className: 'text-sm font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent' }, 'ClipForge'),
+        ),
+        React.createElement('span', { className: 'text-2xs text-surface-500 hidden sm:inline' }, 'Beta'),
+      ),
+      React.createElement('div', { className: 'flex items-center gap-2' },
+        React.createElement('div', { className: 'flex items-center gap-1 text-2xs text-surface-400 bg-surface-800 px-2 py-1 rounded-md' },
+          React.createElement('span', null, 'Undo'),
+          React.createElement('span', { className: 'text-surface-600' }, '|'),
+          React.createElement('span', null, 'Redo'),
+        ),
+        React.createElement('button', {
+          onClick: () => setShowExport(true),
+          className: 'flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-md text-xs font-medium text-white shadow-lg shadow-blue-600/20 transition-all hover:scale-105 active:scale-95',
+        },
+          React.createElement('span', null, '\uD83D\uDCE4'),
+          ' Export',
+        ),
+      ),
+    ),
+    React.createElement('div', { className: 'flex-1 flex flex-col min-h-0' },
+      React.createElement('div', { className: 'flex flex-1 min-h-0' },
+        React.createElement('aside', { className: 'w-64 shrink-0 hidden md:flex flex-col' },
+          React.createElement(Sidebar, {
+            activeTab: sidebarTab,
+            onTabChange: setSidebarTab,
+            onAddText: (text, trackId) => {},
+            onAddClip: tl.addClip,
+            tracks: tl.tracks,
+          }),
+        ),
+        React.createElement('main', { className: 'flex-1 flex flex-col min-w-0' },
+          React.createElement(PreviewPlayer, {
+            currentTime: tl.currentTime,
+            duration: tl.duration,
+            isPlaying: tl.isPlaying,
+            selectedClip,
+            tracks: tl.tracks,
+            onTogglePlay: tl.togglePlay,
+            onSeek: tl.seek,
+            onSkipFrame: tl.skipFrame,
+          }),
+        ),
+        React.createElement('aside', { className: 'w-64 shrink-0 hidden lg:flex flex-col' },
+          React.createElement(PropertiesPanel, { clip: selectedClip, onUpdateClip: tl.updateClip }),
+        ),
+      ),
+      React.createElement(Timeline, {
+        tracks: tl.tracks,
+        currentTime: tl.currentTime,
+        duration: tl.duration,
+        zoom: tl.zoom,
+        selectedClipId: tl.selectedClipId,
+        isPlaying: tl.isPlaying,
+        onSeek: tl.seek,
+        onSelectClip: tl.selectClip,
+        onMoveClip: tl.moveClip,
+        onTrimClip: tl.trimClip,
+        onSplitClip: tl.splitClip,
+        onDeleteClip: tl.deleteClip,
+        onZoomChange: tl.setZoom,
+        timeToX: tl.timeToX,
+        xToTime: tl.xToTime,
+      }),
+    ),
+    React.createElement('div', { className: 'md:hidden flex border-t border-surface-700 bg-surface-900' },
+      ['media', 'text', 'transitions', 'stickers', 'audio'].map(tab =>
+        React.createElement('button', {
+          key: tab,
+          onClick: () => setSidebarTab(tab),
+          className: `flex-1 py-2 text-2xs font-medium transition-colors ${sidebarTab === tab ? 'text-blue-400 bg-surface-800' : 'text-surface-400'}`,
+        }, tab.charAt(0).toUpperCase() + tab.slice(1))
+      ),
+    ),
+    React.createElement(ExportModal, { isOpen: showExport, onClose: () => setShowExport(false) }),
+  );
+}
+
+// ─── Mount ─────────────────────────────────────────────────────────
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
+</script>
+</body>
+</html>
