@@ -43,8 +43,11 @@ export default function PropertiesPanel({
     }
   }, [clip, clipTime, onAddKeyframe, onRemoveKeyframe]);
 
-  const hasKf = (prop: string) =>
-    clip.keyframes?.[prop as keyof typeof clip.keyframes]?.some((k: any) => Math.abs(k.time - clipTime) < 0.05);
+  const hasKfAt = (prop: string) =>
+    (clip.keyframes?.[prop as keyof typeof clip.keyframes] as { time: number; value: number }[] | undefined)?.some((k: any) => Math.abs(k.time - clipTime) < 0.05);
+
+  const getKfList = (prop: string): { time: number; value: number }[] =>
+    (clip.keyframes?.[prop as keyof typeof clip.keyframes] as { time: number; value: number }[] | undefined) || [];
 
   return (
     <div className="w-64 flex flex-col bg-zinc-800/90 border-l border-zinc-700/50 overflow-y-auto">
@@ -72,34 +75,39 @@ export default function PropertiesPanel({
         <SectionLabel>Transform</SectionLabel>
 
         <AnimPropRow label="Position X" value={`${Math.round((clip.posX ?? 0.5) * 100)}%`}
-          hasKf={!!hasKf('posX')} onToggleKf={() => toggleKeyframe('posX', clip.posX ?? 0.5)}>
+          hasKf={!!hasKfAt('posX')} onToggleKf={() => toggleKeyframe('posX', clip.posX ?? 0.5)}>
           <input type="range" min={0} max={1} step={0.01} value={clip.posX ?? 0.5}
             onChange={e => handleChange('posX', Number(e.target.value))} className="flex-1 h-1 accent-white/50" />
         </AnimPropRow>
+        <KfMarkers prop="posX" kfs={getKfList('posX')} clipTime={clipTime} onRemove={t => onRemoveKeyframe(clip.id, 'posX', t)} />
 
         <AnimPropRow label="Position Y" value={`${Math.round((clip.posY ?? 0.5) * 100)}%`}
-          hasKf={!!hasKf('posY')} onToggleKf={() => toggleKeyframe('posY', clip.posY ?? 0.5)}>
+          hasKf={!!hasKfAt('posY')} onToggleKf={() => toggleKeyframe('posY', clip.posY ?? 0.5)}>
           <input type="range" min={0} max={1} step={0.01} value={clip.posY ?? 0.5}
             onChange={e => handleChange('posY', Number(e.target.value))} className="flex-1 h-1 accent-white/50" />
         </AnimPropRow>
+        <KfMarkers prop="posY" kfs={getKfList('posY')} clipTime={clipTime} onRemove={t => onRemoveKeyframe(clip.id, 'posY', t)} />
 
         <AnimPropRow label="Scale" value={`${(clip.scale ?? 1).toFixed(2)}x`}
-          hasKf={!!hasKf('scale')} onToggleKf={() => toggleKeyframe('scale', clip.scale ?? 1)}>
+          hasKf={!!hasKfAt('scale')} onToggleKf={() => toggleKeyframe('scale', clip.scale ?? 1)}>
           <input type="range" min={0.1} max={3} step={0.05} value={clip.scale ?? 1}
             onChange={e => handleChange('scale', Number(e.target.value))} className="flex-1 h-1 accent-white/50" />
         </AnimPropRow>
+        <KfMarkers prop="scale" kfs={getKfList('scale')} clipTime={clipTime} onRemove={t => onRemoveKeyframe(clip.id, 'scale', t)} />
 
         <AnimPropRow label="Rotation" value={`${(clip.rotation ?? 0).toFixed(0)}°`}
-          hasKf={!!hasKf('rotation')} onToggleKf={() => toggleKeyframe('rotation', clip.rotation ?? 0)}>
+          hasKf={!!hasKfAt('rotation')} onToggleKf={() => toggleKeyframe('rotation', clip.rotation ?? 0)}>
           <input type="range" min={-180} max={180} step={1} value={clip.rotation ?? 0}
             onChange={e => handleChange('rotation', Number(e.target.value))} className="flex-1 h-1 accent-white/50" />
         </AnimPropRow>
+        <KfMarkers prop="rotation" kfs={getKfList('rotation')} clipTime={clipTime} onRemove={t => onRemoveKeyframe(clip.id, 'rotation', t)} />
 
         <AnimPropRow label="Opacity" value={`${Math.round((clip.opacity ?? 1) * 100)}%`}
-          hasKf={!!hasKf('opacity')} onToggleKf={() => toggleKeyframe('opacity', clip.opacity ?? 1)}>
+          hasKf={!!hasKfAt('opacity')} onToggleKf={() => toggleKeyframe('opacity', clip.opacity ?? 1)}>
           <input type="range" min={0} max={1} step={0.05} value={clip.opacity ?? 1}
             onChange={e => handleChange('opacity', Number(e.target.value))} className="flex-1 h-1 accent-white/50" />
         </AnimPropRow>
+        <KfMarkers prop="opacity" kfs={getKfList('opacity')} clipTime={clipTime} onRemove={t => onRemoveKeyframe(clip.id, 'opacity', t)} />
 
         {/* Section: Color Adjust */}
         {clip.type === 'video' && (
@@ -218,17 +226,49 @@ function AnimPropRow({ label, value, hasKf, onToggleKf, children }: {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={onToggleKf}
-            className={`w-3 h-3 rounded-full border transition-colors ${hasKf ? 'bg-blue-400 border-blue-400' : 'border-white/20 hover:border-white/40'}`}
-            title={hasKf ? 'Remove keyframe' : 'Add keyframe'}
-          />
+            className={`w-4 h-4 rounded-full border-2 transition-all duration-150 flex items-center justify-center ${
+              hasKf ? 'bg-blue-400 border-blue-400 shadow-sm shadow-blue-400/40' : 'border-white/20 hover:border-white/40'
+            }`}
+            title={hasKf ? 'Remove keyframe at playhead' : 'Add keyframe at playhead'}
+          >
+            {hasKf && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+          </button>
           <span className="text-[10px] text-white/30 uppercase tracking-wider">{label}</span>
+          {hasKf && <span className="text-[8px] text-blue-400/70">●</span>}
         </div>
         {value && <span className="text-[10px] text-white/40">{value}</span>}
       </div>
       <div className="flex items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+function KfMarkers({ prop, kfs, clipTime, onRemove }: {
+  prop: string; kfs: { time: number; value: number }[]; clipTime: number; onRemove: (t: number) => void;
+}) {
+  if (kfs.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 pb-1 border-b border-zinc-700/20 mb-1">
+      {kfs.map(kf => {
+        const isAtPlayhead = Math.abs(kf.time - clipTime) < 0.05;
+        return (
+          <button key={`${prop}-${kf.time}`}
+            onClick={() => onRemove(kf.time)}
+            className={`text-[9px] px-1.5 py-0.5 rounded-full transition-colors flex items-center gap-0.5 ${
+              isAtPlayhead
+                ? 'bg-blue-500/30 text-blue-300 border border-blue-500/30'
+                : 'bg-zinc-700/40 text-white/40 border border-zinc-600/20 hover:bg-zinc-600/40 hover:text-white/60'
+            }`}
+            title={`${kf.time.toFixed(2)}s = ${kf.value.toFixed(2)} (click to remove)`}
+          >
+            <span>{kf.time.toFixed(1)}s</span>
+            <span className="opacity-50">✕</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

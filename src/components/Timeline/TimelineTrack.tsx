@@ -68,7 +68,14 @@ function TimelineTrackInner({ track, allTracks, zoom, onSelectClip, onMoveClip, 
         const left = clip.startTime * zoom;
         const width = Math.max(4, clip.duration * zoom);
         const barColor = BAR_COLORS[clip.type] || BAR_COLORS.video;
-        const kfCount = clip.keyframes ? Object.values(clip.keyframes).reduce((s: number, a: any) => s + (a?.length || 0), 0) : 0;
+        const kfMarkers: { time: number; prop: string }[] = [];
+        if (clip.keyframes) {
+          for (const [prop, arr] of Object.entries(clip.keyframes)) {
+            if (arr) for (const k of arr) kfMarkers.push({ time: k.time, prop });
+          }
+        }
+        kfMarkers.sort((a, b) => a.time - b.time);
+        const uniqueMarkers = kfMarkers.filter((m, i, a) => i === 0 || m.time !== a[i-1].time);
 
         return (
           // @ts-ignore - react-draggable v4 types are strict with position prop
@@ -88,7 +95,11 @@ function TimelineTrackInner({ track, allTracks, zoom, onSelectClip, onMoveClip, 
               style={{ left: 0, width: `${width}px`, minWidth: '24px' }}
               onClick={(e) => { e.stopPropagation(); onSelectClip(clip.id); }}
             >
-              {kfCount > 0 && <div className="absolute -top-0.5 right-1 flex gap-0.5"><div className="w-1 h-1 rounded-full bg-blue-400" /></div>}
+              {uniqueMarkers.map(m => (
+                <div key={`${m.prop}-${m.time}`}
+                  className="absolute top-0 bottom-0 w-0.5 bg-blue-400/70 z-10 pointer-events-none"
+                  style={{ left: `${(m.time / clip.duration) * 100}%` }} />
+              ))}
               <span className="text-[10px] mr-1 opacity-70">{ICONS[clip.type]}</span>
               <span className="text-[10px] text-white/80 font-medium truncate flex-1">{clip.label}</span>
               {width > 40 && <span className="text-[8px] text-white/30 tabular-nums ml-auto">{clip.duration.toFixed(1)}s</span>}
