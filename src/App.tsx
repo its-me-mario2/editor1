@@ -33,6 +33,11 @@ export default function App() {
       if ((e.code === 'Delete' || e.code === 'Backspace') && editor.selectedClipId) {
         e.preventDefault(); editor.removeClip(editor.selectedClipId);
       }
+      if (e.code === 'KeyK' && editor.selectedClipId && selectedClip) {
+        e.preventDefault();
+        const ct = editor.currentTime - (selectedClip.startTime || 0);
+        editor.addKeyframe(editor.selectedClipId, 'posX', Math.max(0, ct), selectedClip.posX ?? 0.5);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -102,6 +107,8 @@ export default function App() {
           <span>Play</span>
           <kbd className="px-1 py-0.5 rounded bg-white/5 text-white/30">S</kbd>
           <span>Split</span>
+          <kbd className="px-1 py-0.5 rounded bg-white/5 text-white/30">K</kbd>
+          <span>KF</span>
         </div>
         <div className="ml-4">
           <button onClick={() => setExportOpen(true)}

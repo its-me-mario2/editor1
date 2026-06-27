@@ -27,6 +27,7 @@ export default function PropertiesPanel({
   const track = tracks.find(t => t.id === clip.trackId);
   const trackLabel = track ? track.label : 'Unknown';
   const clipTime = currentTime - clip.startTime;
+  const totalKfs = clip.keyframes ? Object.values(clip.keyframes).reduce((s, a) => s + (a?.length || 0), 0) : 0;
 
   const handleChange = useCallback(
     (key: string, value: number | string) => onUpdateClip(clip.id, { [key]: value }),
@@ -53,7 +54,8 @@ export default function PropertiesPanel({
     <div className="w-64 flex flex-col bg-zinc-800/90 border-l border-zinc-700/50 overflow-y-auto">
       <div className="p-3 border-b border-zinc-700/50">
         <h3 className="text-white text-sm font-medium truncate">{clip.label}</h3>
-        <p className="text-[10px] text-white/30 mt-0.5">{trackLabel} · {clip.duration.toFixed(1)}s</p>
+        <p className="text-[10px] text-white/30 mt-0.5">{trackLabel} · {clip.duration.toFixed(1)}s {totalKfs > 0 && <span className="text-blue-400">· {totalKfs} keyframe{totalKfs !== 1 ? 's' : ''}</span>}</p>
+        {totalKfs > 0 && <div className="mt-1.5 text-[9px] font-mono text-white/20 truncate max-h-12 overflow-y-auto">{JSON.stringify(clip.keyframes)}</div>}
       </div>
 
       <div className="p-3 space-y-3">
@@ -226,18 +228,20 @@ function AnimPropRow({ label, value, hasKf, onToggleKf, children }: {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <button
             onClick={onToggleKf}
-            className={`w-4 h-4 rounded-full border-2 transition-all duration-150 flex items-center justify-center ${
-              hasKf ? 'bg-blue-400 border-blue-400 shadow-sm shadow-blue-400/40' : 'border-white/20 hover:border-white/40'
+            className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition-all flex items-center gap-1 ${
+              hasKf
+                ? 'bg-blue-500/30 text-blue-300 border border-blue-500/40 shadow-sm shadow-blue-500/20'
+                : 'bg-zinc-700/50 text-white/30 border border-zinc-600/30 hover:bg-zinc-600/50 hover:text-white/50'
             }`}
             title={hasKf ? 'Remove keyframe at playhead' : 'Add keyframe at playhead'}
           >
-            {hasKf && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+            <span className={hasKf ? 'text-blue-300' : ''}>◆</span>
+            <span>{hasKf ? 'KF' : 'KF'}</span>
           </button>
           <span className="text-[10px] text-white/30 uppercase tracking-wider">{label}</span>
-          {hasKf && <span className="text-[8px] text-blue-400/70">●</span>}
         </div>
         {value && <span className="text-[10px] text-white/40">{value}</span>}
       </div>
