@@ -1,187 +1,138 @@
-import React, { useState, useCallback } from 'react';
-import { SidebarTab, Clip } from './types';
-import { useTimeline } from './hooks/useTimeline';
-import { Timeline } from './components/Timeline';
-import { PreviewPlayer } from './components/PreviewPlayer';
-import { Sidebar } from './components/Sidebar';
-import { PropertiesPanel } from './components/PropertiesPanel';
-import { ExportModal } from './components/ExportModal';
-import { DEFAULT_TRANSITIONS, FILTER_PRESETS, AUDIO_EFFECTS } from './data';
+import React, { useState } from 'react';
+import { Sidebar, PreviewPlayer, Timeline, PropertiesPanel, ExportModal } from './components';
+import { Track, AspectRatio, SidebarTab } from './types';
+import { useEditor } from './hooks/useEditor';
 
-const App: React.FC = () => {
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 9);
+}
+
+export default function App() {
+  const editor = useEditor();
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('16:9');
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('media');
-  const [showExport, setShowExport] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
-  const {
-    tracks, setTracks,
-    currentTime, duration, zoom, setZoom,
-    selectedClipId, isPlaying,
-    togglePlay, seek, skipFrame,
-    selectClip, getSelectedClip, updateClip,
-    splitClip, moveClip, trimClip, addClip, deleteClip,
-    timeToX, xToTime,
-  } = useTimeline();
+  const selectedClip = editor.getSelectedClip();
 
-  const selectedClip = getSelectedClip();
+  const handleAddTextClip = (text: string) => {
+    let textTrack = editor.tracks.find((t: Track) => t.kind === 'text');
+    if (!textTrack) {
+      const id = `track-${generateId()}`;
+      const maxOrder = Math.max(...editor.tracks.map((t: Track) => t.order), -1);
+      editor.setTracks((prev: Track[]) => [...prev, {
+        id, kind: 'text', label: 'Text Overlays', order: maxOrder + 1, clips: [],
+      }]);
+      textTrack = { id, kind: 'text', label: 'Text Overlays', order: maxOrder + 1, clips: [] };
+    }
+    if (textTrack) {
+      const startTime = Math.max(0, editor.currentTime);
+      editor.addClip(textTrack.id, {
+        type: 'text', label: text.slice(0, 20), startTime, duration: 4, text,
+        fontSize: 36, fontColor: '#ffffff', bgColor: 'rgba(0,0,0,0.5)',
+        posX: 0.5, posY: 0.4, fadeIn: 0.5, fadeOut: 0.5,
+      });
+    }
+  };
 
-  const handleAddText = useCallback((text: string, trackId: string) => {
-    const track = tracks.find(t => t.id === trackId);
-    const lastClipEnd = track?.clips.length
-      ? Math.max(...track.clips.map(c => c.startTime + c.duration))
-      : 0;
-    const newClip: Clip = {
-      id: 'text-' + Date.now(),
-      type: 'text',
-      trackId,
-      label: text.slice(0, 20),
-      text,
-      startTime: lastClipEnd,
-      duration: 4,
-      fontSize: 32,
-      fontColor: '#ffffff',
-      bgColor: 'rgba(0,0,0,0.5)',
-      fadeIn: 0.5,
-      fadeOut: 0.5,
-    };
-    addClip(newClip);
-    setSidebarTab('text');
-  }, [tracks, addClip]);
+  const handleAddSticker = (emoji: string) => {
+    let stickerTrack = editor.tracks.find((t: Track) => t.label === 'Stickers');
+    if (!stickerTrack) {
+      const id = `track-${generateId()}`;
+      const maxOrder = Math.max(...editor.tracks.map((t: Track) => t.order), -1);
+      editor.setTracks((prev: Track[]) => [...prev, {
+        id, kind: 'text', label: 'Stickers', order: maxOrder + 1, clips: [],
+      }]);
+      stickerTrack = { id, kind: 'text', label: 'Stickers', order: maxOrder + 1, clips: [] };
+    }
+    if (stickerTrack) {
+      const startTime = Math.max(0, editor.currentTime);
+      editor.addClip(stickerTrack.id, {
+        type: 'text', label: emoji, startTime, duration: 4, text: emoji,
+        fontSize: 48, posX: 0.5, posY: 0.5,
+      });
+    }
+  };
 
-  const handleApplyFilter = useCallback((filterId: string) => {
-    // handled via updateClip
-  }, []);
-
-  // Keyboard shortcuts
-  React.useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
-      if (e.key.toLowerCase() === 's' && selectedClipId) {
-        e.preventDefault();
-        splitClip();
-      }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedClipId) {
-          e.preventDefault();
-          deleteClip(selectedClipId);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [selectedClipId, splitClip, deleteClip]);
+  const handleAddTransition = (type: string) => {
+    if (!selectedClip) return;
+    editor.setTransition(selectedClip.id, type, 0.5);
+  };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-surface-950 text-white overflow-hidden">
-      {/* Title bar */}
-      <header className="flex items-center justify-between px-4 py-2 bg-surface-900 border-b border-surface-700 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-lg">🎬</span>
-            <span className="text-sm font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              ClipForge
-            </span>
-          </div>
-          <span className="text-2xs text-surface-500 hidden sm:inline">Beta</span>
-        </div>
+    <div className="h-screen flex flex-col bg-zinc-900 text-white overflow-hidden">
+      {/* Header */}
+      <header className="flex items-center px-4 py-2 bg-zinc-800/90 border-b border-zinc-700/50 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-2xs text-surface-400 bg-surface-800 px-2 py-1 rounded-md">
-            <span>Undo</span>
-            <span className="text-surface-600">|</span>
-            <span>Redo</span>
-          </div>
-          <button
-            onClick={() => setShowExport(true)}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-md text-xs font-medium text-white shadow-lg shadow-blue-600/20 transition-all hover:scale-105 active:scale-95"
-          >
-            <span>📤</span>
-            Export
-          </button>
+          <span className="text-xl">🎬</span>
+          <span className="font-bold text-sm">ClipForge</span>
         </div>
+        <div className="flex-1" />
+        <button onClick={() => setExportOpen(true)} className="px-4 py-1.5 rounded bg-blue-500 hover:bg-blue-400 text-white text-xs font-medium transition-colors">
+          Export
+        </button>
       </header>
 
       {/* Main workspace */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex flex-1 min-h-0">
-          {/* Left sidebar */}
-          <aside className="w-64 shrink-0 hidden md:flex flex-col">
-            <Sidebar
-              activeTab={sidebarTab}
-              onTabChange={setSidebarTab}
-              transitions={DEFAULT_TRANSITIONS}
-              filters={FILTER_PRESETS}
-              audioEffects={AUDIO_EFFECTS}
-              onAddText={handleAddText}
-              onAddClip={addClip}
-              onApplyFilter={handleApplyFilter}
-              selectedClipId={selectedClipId}
-              tracks={tracks}
-            />
-          </aside>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar
+            activeTab={sidebarTab}
+            onTabChange={setSidebarTab}
+            onAddTextClip={handleAddTextClip}
+            onAddSticker={handleAddSticker}
+            onAddTransition={handleAddTransition}
+            selectedClip={selectedClip}
+          />
 
-          {/* Center: Preview */}
-          <main className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 flex items-center justify-center overflow-hidden bg-zinc-900/50">
             <PreviewPlayer
-              currentTime={currentTime}
-              duration={duration}
-              isPlaying={isPlaying}
-              selectedClip={selectedClip}
-              tracks={tracks}
-              onTogglePlay={togglePlay}
-              onSeek={seek}
-              onSkipFrame={skipFrame}
+              tracks={editor.sortedTracks}
+              currentTime={editor.currentTime}
+              isPlaying={editor.isPlaying}
+              aspectRatio={aspectRatio}
+              onAspectRatioChange={setAspectRatio}
+              onSeek={editor.seek}
+              onTogglePlayback={editor.togglePlayback}
             />
-          </main>
+          </div>
 
-          {/* Right properties panel */}
-          <aside className="w-64 shrink-0 hidden lg:flex flex-col">
-            <PropertiesPanel
-              clip={selectedClip}
-              onUpdateClip={updateClip}
-              filters={FILTER_PRESETS}
-              onApplyFilter={handleApplyFilter}
-            />
-          </aside>
+          <PropertiesPanel
+            clip={selectedClip}
+            tracks={editor.tracks}
+            currentTime={editor.currentTime}
+            onUpdateClip={editor.updateClip}
+            onRemoveClip={editor.removeClip}
+            onAddKeyframe={editor.addKeyframe}
+            onRemoveKeyframe={editor.removeKeyframe}
+            onSetTransition={editor.setTransition}
+          />
         </div>
 
-        {/* Bottom timeline */}
         <Timeline
-          tracks={tracks}
-          currentTime={currentTime}
-          duration={duration}
-          zoom={zoom}
-          selectedClipId={selectedClipId}
-          isPlaying={isPlaying}
-          onSeek={seek}
-          onSelectClip={selectClip}
-          onMoveClip={moveClip}
-          onTrimClip={trimClip}
-          onSplitClip={splitClip}
-          onDeleteClip={deleteClip}
-          onZoomChange={setZoom}
-          timeToX={timeToX}
-          xToTime={xToTime}
+          tracks={editor.tracks}
+          currentTime={editor.currentTime}
+          duration={editor.duration}
+          zoom={editor.zoom}
+          isPlaying={editor.isPlaying}
+          selectedClipId={editor.selectedClipId}
+          onSeek={editor.seek}
+          onZoomChange={editor.setZoom}
+          onSelectClip={editor.selectClip}
+          onMoveClip={editor.moveClip}
+          onTrimClip={editor.trimClip}
+          onSplitClip={editor.splitClip}
+          onRemoveClip={editor.removeClip}
+          onTogglePlayback={editor.togglePlayback}
+          onAddTrack={editor.addTrack}
+          onRemoveTrack={editor.removeTrack}
+          onToggleTrackHidden={editor.toggleTrackHidden}
+          onToggleTrackLocked={editor.toggleTrackLocked}
+          onReorderTrack={editor.reorderTrack}
         />
       </div>
 
-      {/* Mobile tab bar */}
-      <div className="md:hidden flex border-t border-surface-700 bg-surface-900">
-        {(['media', 'text', 'transitions', 'stickers', 'audio'] as SidebarTab[]).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setSidebarTab(tab)}
-            className={`flex-1 py-2 text-2xs font-medium transition-colors ${
-              sidebarTab === tab ? 'text-blue-400 bg-surface-800' : 'text-surface-400'
-            }`}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
-      </div>
-
-      {/* Export modal */}
-      <ExportModal isOpen={showExport} onClose={() => setShowExport(false)} />
+      <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} />
     </div>
   );
-};
-
-export default App;
+}
